@@ -8,12 +8,26 @@ from onedata_mcp.modules import files, spaces
 
 
 def _setup_logging() -> logging.Logger:
-    log_level = os.getenv("LOG_LEVEL", "INFO").upper()
+    """Configure logging for the server."""
+    log_level = os.environ.get("FASTMCP_LOG_LEVEL", "INFO")
+    log_format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    log_file = os.environ.get("FASTMCP_LOG_FILE")
 
-    logging.basicConfig(
-        level=getattr(logging, log_level, logging.INFO),
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    )
+    logging.basicConfig(level=log_level, format=log_format, force=True)
+
+    print(f"Log file: {log_file}, log level: {log_level}")
+    if log_file:
+        try:
+            log_dir = os.path.dirname(log_file)
+            if log_dir and not os.path.exists(log_dir):
+                os.makedirs(log_dir, exist_ok=True)
+
+            file_handler = logging.FileHandler(log_file, encoding="utf-8")
+            file_handler.setFormatter(logging.Formatter(log_format))
+            logging.getLogger().addHandler(file_handler)
+            logging.info("Logging to file: %s", log_file)
+        except Exception as e:
+            logging.error("Failed to set up log file %s: %s", log_file, e)
 
     return logging.getLogger("onedata-mcp-server")
 
@@ -41,9 +55,14 @@ def _create_onedata_mcp_server() -> FastMCP:
     return mcp
 
 
+logger = _setup_logging()
+mcp = _create_onedata_mcp_server()
+
+
 def main() -> None:
+    """Main entry point for the Onedata MCP Server."""
     try:
-        logger = _setup_logging()
+        logger.info("Server started")
         mcp.run()
 
     except KeyboardInterrupt:
@@ -52,9 +71,6 @@ def main() -> None:
     except Exception as e:
         logger.error(e)  # type: ignore
         sys.exit(1)
-
-
-mcp = _create_onedata_mcp_server()
 
 
 if __name__ == "__main__":
