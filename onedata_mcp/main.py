@@ -4,7 +4,7 @@ import sys
 
 from fastmcp import FastMCP
 
-from onedata_mcp.modules import files, spaces
+from onedata_mcp.modules import files, harvesters, spaces
 
 
 def _setup_logging() -> logging.Logger:
@@ -50,6 +50,7 @@ def _create_onedata_mcp_server() -> FastMCP:
     )
 
     files.register_module(mcp)
+    harvesters.register_module(mcp)
     spaces.register_module(mcp)
 
     return mcp
