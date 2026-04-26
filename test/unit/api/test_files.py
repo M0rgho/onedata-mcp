@@ -1,5 +1,7 @@
 from urllib.parse import quote
 
+import re
+
 import pytest
 from pytest_httpx import HTTPXMock
 
@@ -480,3 +482,60 @@ async def test_set_file_metadata_sets_content_type(
     assert put_requests[1].headers["Content-Type"] == "application/json"
     assert put_requests[0].content == b"<rdf/>"
     assert put_requests[1].content == b'{"a":1}'
+
+
+@pytest.mark.asyncio
+async def test_create_file_posts_child_when_create_parents_false(
+    monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
+) -> None:
+    _set_env(monkeypatch)
+    httpx_mock.add_response(
+        method="POST",
+        url=_lookup_url("/space/parent"),
+        json={"fileId": "parent-id"},
+    )
+    httpx_mock.add_response(
+        method="POST",
+        url=re.compile(r"https://provider\.example/api/v3/oneprovider/data/parent-id/children\?.*"),
+        json={"fileId": "new-fid"},
+    )
+
+    fid = await files.create_file("/space/parent/note.txt", "hello")
+
+    assert fid == "new-fid"
+    post = next(
+        r
+        for r in httpx_mock.get_requests()
+        if r.method == "POST" and r.url.host == "provider.example" and "/children" in r.url.path
+    )
+    assert post.url.params["name"] == "note.txt"
+
+
+@pytest.mark.asyncio
+async def test_create_file_put_path_when_create_parents_true(
+    monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
+) -> None:
+    _set_env(monkeypatch)
+    httpx_mock.add_response(
+        method="POST",
+        url=_lookup_url("/space"),
+        json={"fileId": "root-id"},
+    )
+    httpx_mock.add_response(
+        method="PUT",
+        url=re.compile(
+            r"https://provider\.example/api/v3/oneprovider/data/root-id/path/results/d\.csv\?.*"
+        ),
+        json={"fileId": "nested-fid"},
+    )
+
+    fid = await files.create_file("/space/results/d.csv", "x", create_parents=True)
+
+    assert fid == "nested-fid"
+    put = next(
+        r
+        for r in httpx_mock.get_requests()
+        if r.method == "PUT" and r.url.host == "provider.example" and "/path/" in r.url.path
+    )
+    assert put.url.params["create_parents"] == "true"
+    assert put.content == b"x"

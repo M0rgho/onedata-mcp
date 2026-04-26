@@ -250,8 +250,36 @@ async def grep_file_content(
     return "\n".join(line for line in content_str.splitlines() if pattern in line)
 
 
-async def create_file(path: str, content: str) -> str:
+async def create_file(path: str, content: str, *, create_parents: bool = False) -> str:
     config = get_oneprovider_config()
+    normalized = path.strip("/")
+
+    if create_parents:
+        if "/" not in normalized:
+            raise ValueError(
+                "path must be /<space_name>/<path_to_file> when create_parents is true"
+            )
+        space_name, relative_path = normalized.split("/", 1)
+        if not relative_path:
+            raise ValueError("path must include a file path under the space")
+        root_id = await get_file_id(f"/{space_name}")
+        encoded_path = quote(relative_path, safe="/")
+        try:
+            response = await request(
+                config,
+                "PUT",
+                f"/data/{root_id}/path/{encoded_path}",
+                params={"create_parents": True},
+                body=content.encode("utf-8"),
+                additional_headers={"Content-Type": "application/octet-stream"},
+            )
+        except OnedataApiError as e:
+            if e.errno == "eexist":
+                raise FileExistsError(f"File {path} already exists") from e
+            logger.error(f"Error creating file {path}: {e}")
+            raise e
+        return response["body"]["fileId"]
+
     parent_path, file_name = path.rsplit("/", 1)
 
     parent_id = await _normalize_path_to_file_id(parent_path)

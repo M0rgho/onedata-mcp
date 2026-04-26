@@ -225,6 +225,10 @@ def register_module(mcp: FastMCP) -> None:
         content: str = Field(
             description="Content of the file as a string",
         ),
+        create_parents: bool = Field(
+            default=False,
+            description="Create missing directories under the space root via Oneprovider path API",
+        ),
         ctx: Optional[Context] = None,
     ) -> str:
         """
@@ -233,7 +237,7 @@ def register_module(mcp: FastMCP) -> None:
         Returns the file id of the created file.
         """
         path = await _resolve_with_mcp_root(path, ctx)
-        return await create_file(path, content)
+        return await create_file(path, content, create_parents=create_parents)
 
     @mcp.tool(name="delete_file", annotations=ToolAnnotations(destructiveHint=True))
     async def mcp_delete_file(
