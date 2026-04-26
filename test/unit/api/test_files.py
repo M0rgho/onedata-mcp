@@ -19,6 +19,35 @@ def _lookup_url(path: str) -> str:
     return f"https://provider.example/api/v3/oneprovider/lookup-file-id/{quote(path, safe='')}"
 
 
+def _mock_available_spaces(httpx_mock: HTTPXMock, names: list[str]) -> None:
+    space_ids = [f"s{i}" for i in range(len(names))]
+    httpx_mock.add_response(
+        method="GET",
+        url="https://onezone.example/api/v3/onezone/spaces",
+        json={"spaces": space_ids},
+        is_reusable=True,
+        is_optional=True,
+    )
+    for space_id, name in zip(space_ids, names, strict=True):
+        httpx_mock.add_response(
+            method="GET",
+            url=f"https://onezone.example/api/v3/onezone/spaces/{space_id}",
+            json={"name": name},
+            is_reusable=True,
+            is_optional=True,
+        )
+
+
+@pytest.fixture
+def available_spaces(request: pytest.FixtureRequest) -> list[str]:
+    return getattr(request, "param", ["space"])
+
+
+@pytest.fixture(autouse=True)
+def _mock_spaces_for_tests(httpx_mock: HTTPXMock, available_spaces: list[str]) -> None:
+    _mock_available_spaces(httpx_mock, available_spaces)
+
+
 @pytest.mark.asyncio
 async def test_get_file_id_encodes_path_and_returns_id(
     monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
@@ -70,10 +99,58 @@ async def test_get_file_attributes_sends_selected_attributes(
     result = await files.get_file_attributes("/space/path", attributes=["name", "size"])
 
     assert result == {"name": "x"}
-    requests = httpx_mock.get_requests()
-    assert requests[1].method == "GET"
-    assert requests[1].url.path == "/api/v3/oneprovider/data/file-id"
-    assert requests[1].content == b'{"attributes":["name","size"]}'
+    provider_requests = [r for r in httpx_mock.get_requests() if r.url.host == "provider.example"]
+    assert provider_requests[1].method == "GET"
+    assert provider_requests[1].url.path == "/api/v3/oneprovider/data/file-id"
+    assert provider_requests[1].content == b'{"attributes":["name","size"]}'
+
+
+@pytest.mark.asyncio
+async def test_list_children_applies_default_attributes_when_none(
+    monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
+) -> None:
+    _set_env(monkeypatch)
+    httpx_mock.add_response(
+        method="POST",
+        url=_lookup_url("/space/path"),
+        json={"fileId": "parent-id"},
+    )
+    httpx_mock.add_response(
+        method="GET",
+        url="https://provider.example/api/v3/oneprovider/data/parent-id/children",
+        json={"children": [], "isLast": True, "nextPageToken": None},
+    )
+
+    await files.list_children("/space/path", attributes=None, limit=10, offset=0)
+
+    request = next(
+        r for r in httpx_mock.get_requests() if r.url.path.endswith("/data/parent-id/children")
+    )
+    assert b'"attributes":' in request.content
+
+
+@pytest.mark.asyncio
+async def test_list_files_recursively_applies_default_attributes_when_none(
+    monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
+) -> None:
+    _set_env(monkeypatch)
+    httpx_mock.add_response(
+        method="POST",
+        url=_lookup_url("/space/path"),
+        json={"fileId": "parent-id"},
+    )
+    httpx_mock.add_response(
+        method="GET",
+        url="https://provider.example/api/v3/oneprovider/data/parent-id/files",
+        json={"files": [], "isLast": True, "nextPageToken": None},
+    )
+
+    await files.list_files_recursively("/space/path", attributes=None, limit=10)
+
+    request = next(
+        r for r in httpx_mock.get_requests() if r.url.path.endswith("/data/parent-id/files")
+    )
+    assert b'"attributes":' in request.content
 
 
 @pytest.mark.asyncio
@@ -107,6 +184,69 @@ async def test_list_files_recursively_rejects_deprecated_attribute_names(
 
 
 @pytest.mark.asyncio
+async def test_list_children_filters_deprecated_response_fields(
+    monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
+) -> None:
+    _set_env(monkeypatch)
+    httpx_mock.add_response(
+        method="POST",
+        url=_lookup_url("/space/path"),
+        json={"fileId": "parent-id"},
+    )
+    httpx_mock.add_response(
+        method="GET",
+        url="https://provider.example/api/v3/oneprovider/data/parent-id/children",
+        json={
+            "children": [
+                {"name": "a.txt", "file_id": "old-id", "fileId": "new-id"},
+                {"name": "b.txt", "mode": "0777", "posixPermissions": "0777"},
+            ],
+            "isLast": True,
+            "nextPageToken": None,
+        },
+    )
+
+    result = await files.list_children("/space/path", limit=10, offset=0)
+
+    assert result["children"][0]["fileId"] == "new-id"
+    assert "file_id" not in result["children"][0]
+    assert "mode" not in result["children"][1]
+    assert result["children"][1]["posixPermissions"] == "0777"
+
+
+@pytest.mark.asyncio
+async def test_list_files_recursively_filters_deprecated_response_fields(
+    monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
+) -> None:
+    _set_env(monkeypatch)
+    httpx_mock.add_response(
+        method="POST",
+        url=_lookup_url("/space/path"),
+        json={"fileId": "parent-id"},
+    )
+    httpx_mock.add_response(
+        method="GET",
+        url="https://provider.example/api/v3/oneprovider/data/parent-id/files",
+        json={
+            "files": [
+                {"name": "a.txt", "file_id": "old-id", "fileId": "new-id"},
+                {"name": "b.txt", "owner_id": "123", "ownerUserId": "123"},
+            ],
+            "isLast": True,
+            "nextPageToken": None,
+        },
+    )
+
+    result = await files.list_files_recursively("/space/path", limit=10)
+
+    assert result["files"][0]["fileId"] == "new-id"
+    assert "file_id" not in result["files"][0]
+    assert "owner_id" not in result["files"][1]
+    assert result["files"][1]["ownerUserId"] == "123"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("available_spaces", [["Alpha", "Beta"]], indirect=True)
 async def test_list_files_recursively_formats_invalid_space_error_with_hints(
     monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
 ) -> None:
@@ -122,29 +262,15 @@ async def test_list_files_recursively_formats_invalid_space_error_with_hints(
             }
         },
     )
-    httpx_mock.add_response(
-        method="GET",
-        url="https://onezone.example/api/v3/onezone/spaces",
-        json={"spaces": ["s1", "s2"]},
-    )
-    httpx_mock.add_response(
-        method="GET",
-        url="https://onezone.example/api/v3/onezone/spaces/s1",
-        json={"name": "Alpha"},
-    )
-    httpx_mock.add_response(
-        method="GET",
-        url="https://onezone.example/api/v3/onezone/spaces/s2",
-        json={"name": "Beta"},
-    )
 
-    with pytest.raises(OnedataInvalidSpaceError, match="Space does not exist") as exc:
+    with pytest.raises(OnedataInvalidSpaceError, match='Space "dsadas" does not exist') as exc:
         await files.list_files_recursively("dsadas", limit=10)
 
-    assert "Available spaces: Alpha, Beta." in str(exc.value)
+    assert 'Available spaces: "Alpha", "Beta".' in str(exc.value)
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("available_spaces", [["Alpha"]], indirect=True)
 async def test_list_children_formats_invalid_space_error_with_hints(
     monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
 ) -> None:
@@ -160,21 +286,11 @@ async def test_list_children_formats_invalid_space_error_with_hints(
             }
         },
     )
-    httpx_mock.add_response(
-        method="GET",
-        url="https://onezone.example/api/v3/onezone/spaces",
-        json={"spaces": ["s1"]},
-    )
-    httpx_mock.add_response(
-        method="GET",
-        url="https://onezone.example/api/v3/onezone/spaces/s1",
-        json={"name": "Alpha"},
-    )
 
-    with pytest.raises(OnedataInvalidSpaceError, match="Space does not exist") as exc:
+    with pytest.raises(OnedataInvalidSpaceError, match='Space "dsadas" does not exist') as exc:
         await files.list_children("dsadas", limit=10, offset=0)
 
-    assert "Available spaces: Alpha." in str(exc.value)
+    assert 'Available spaces: "Alpha".' in str(exc.value)
 
 
 @pytest.mark.asyncio
@@ -283,7 +399,9 @@ async def test_get_file_metadata_fetches_each_type_with_rdf_accept_header(
     assert result["json"] == {"k": "v"}
     assert result["rdf"] == "<rdf/>"
     assert result["xattrs"] == {"x": "1"}
-    rdf_req = httpx_mock.get_requests()[2]
+    rdf_req = next(
+        r for r in httpx_mock.get_requests() if r.url.path.endswith("/data/fid-meta/metadata/rdf")
+    )
     assert rdf_req.url.path == "/api/v3/oneprovider/data/fid-meta/metadata/rdf"
     assert rdf_req.headers["Accept"] == "application/rdf+xml"
 
@@ -353,8 +471,12 @@ async def test_set_file_metadata_sets_content_type(
     await files.set_file_metadata("/space/a", "rdf", "<rdf/>")
     await files.set_file_metadata("/space/a", "json", '{"a":1}')
 
-    requests = httpx_mock.get_requests()
-    assert requests[1].headers["Content-Type"] == "application/rdf+xml"
-    assert requests[3].headers["Content-Type"] == "application/json"
-    assert requests[1].content == b"<rdf/>"
-    assert requests[3].content == b'{"a":1}'
+    put_requests = [
+        r
+        for r in httpx_mock.get_requests()
+        if r.method == "PUT" and r.url.host == "provider.example"
+    ]
+    assert put_requests[0].headers["Content-Type"] == "application/rdf+xml"
+    assert put_requests[1].headers["Content-Type"] == "application/json"
+    assert put_requests[0].content == b"<rdf/>"
+    assert put_requests[1].content == b'{"a":1}'

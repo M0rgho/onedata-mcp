@@ -5,23 +5,24 @@ from urllib.parse import quote
 
 import httpx
 
+from onedata_mcp.api.spaces import list_user_spaces
 from onedata_mcp.config import get_oneprovider_config
 from onedata_mcp.utils import OnedataApiError, OnedataInvalidSpaceError, request
 
 DEFAULT_FILE_ATTRIBUTE_KEYS = (
-    "fileId",
+    # "fileId",
     "path",
-    "parentFileId",
+    # "parentFileId",
     "name",
     "type",
     "size",
     "posixPermissions",
     # "ownerUserId",
-    "originProviderId",
+    # "originProviderId",
     "atime",
     "mtime",
-    "ctime",
-    "hardlinkCount",
+    # "ctime",
+    # "hardlinkCount",
 )
 
 DEPRECATED_ATTRIBUTE_NAME_MAPPING = {
@@ -50,17 +51,36 @@ def _reject_deprecated_attributes(attributes: Iterable[str] | None) -> None:
         f"{old}->{DEPRECATED_ATTRIBUTE_NAME_MAPPING[old]}" for old in sorted(set(deprecated))
     )
     raise ValueError(
-        "Deprecated attribute names are not supported. "
-        f"Use the new names instead: {replacements}"
+        f"Deprecated attribute names are not supported. Use the new names instead: {replacements}"
     )
 
 
-async def _raise_invalid_space_error_if_needed(error: OnedataApiError) -> None:
+def _strip_deprecated_fields_in_list(
+    response_body: dict[str, Any], list_key: str
+) -> dict[str, Any]:
+    items = response_body.get(list_key)
+    if not isinstance(items, list):
+        return response_body
+
+    deprecated_keys = set(DEPRECATED_ATTRIBUTE_NAME_MAPPING.keys())
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        for key in deprecated_keys:
+            item.pop(key, None)
+
+    return response_body
+
+
+async def _raise_invalid_space_error_if_needed(error: OnedataApiError, path: str) -> None:
     if error.error_id != "spaceNotSupportedBy":
         return
-
-    # Local import to avoid circular dependency between API modules.
-    from onedata_mcp.api.spaces import list_user_spaces
+    error_details = error.body.get("error", {}).get("details", {})
+    requested_space_name = (
+        error_details.get("spaceId") if isinstance(error_details.get("spaceId"), str) else None
+    )
+    if not requested_space_name and path.startswith("/"):
+        requested_space_name = path.split("/")[1]
 
     try:
         spaces = await list_user_spaces()
@@ -70,8 +90,14 @@ async def _raise_invalid_space_error_if_needed(error: OnedataApiError) -> None:
     except Exception:
         space_names = []
 
-    hint = f" Available spaces: {', '.join(space_names)}." if space_names else ""
-    raise OnedataInvalidSpaceError(f"Space does not exist.{hint}", response=error.response) from error
+    requested_part = (
+        f'Space "{requested_space_name}" does not exist.'
+        if requested_space_name
+        else "Space does not exist."
+    )
+    quoted_names = ", ".join(f'"{name}"' for name in space_names)
+    hint = f" Available spaces: {quoted_names}." if quoted_names else ""
+    raise OnedataInvalidSpaceError(f"{requested_part}{hint}", response=error.response) from error
 
 
 async def get_file_id(path: str) -> str:
@@ -81,6 +107,8 @@ async def get_file_id(path: str) -> str:
     try:
         response = await request(config, "POST", f"/lookup-file-id/{encoded_path}")
     except OnedataApiError as e:
+        logger.debug(f"Error getting file id for path {path}: {e}")
+        await _raise_invalid_space_error_if_needed(e, path)
         if e.errno == "enoent":
             raise FileNotFoundError(f'Path "{path}" not found') from e
         raise
@@ -123,12 +151,13 @@ async def list_children(
 ) -> dict[str, Any]:
     config = get_oneprovider_config()
     parent_id = await _normalize_path_to_file_id(parent_id_or_path)
-    _reject_deprecated_attributes(attributes)
+    requested_attributes = tuple[str, ...](attributes or DEFAULT_FILE_ATTRIBUTE_KEYS)
+    _reject_deprecated_attributes(requested_attributes)
     request_body: dict[str, Any] = {"limit": limit, "offset": offset}
     if token is not None:
         request_body["token"] = token
-    if attributes is not None:
-        request_body["attributes"] = list(attributes)
+    if requested_attributes:
+        request_body["attributes"] = list(requested_attributes)
 
     try:
         response = await request(
@@ -138,9 +167,9 @@ async def list_children(
             json_body=request_body,
         )
     except OnedataApiError as e:
-        await _raise_invalid_space_error_if_needed(e)
+        await _raise_invalid_space_error_if_needed(e, parent_id_or_path)
         raise
-    return response["body"]
+    return _strip_deprecated_fields_in_list(response["body"], "children")
 
 
 async def list_files_recursively(
@@ -154,7 +183,8 @@ async def list_files_recursively(
 ) -> dict[str, Any]:
     config = get_oneprovider_config()
     parent_id = await _normalize_path_to_file_id(parent_id_or_path)
-    _reject_deprecated_attributes(attributes)
+    requested_attributes = tuple[str, ...](attributes or DEFAULT_FILE_ATTRIBUTE_KEYS)
+    _reject_deprecated_attributes(requested_attributes)
     request_body: dict[str, Any] = {"limit": limit}
     if token is not None:
         request_body["token"] = token
@@ -162,8 +192,8 @@ async def list_files_recursively(
         request_body["start_after"] = start_after
     if prefix is not None:
         request_body["prefix"] = prefix
-    if attributes is not None:
-        request_body["attributes"] = list(attributes)
+    if requested_attributes:
+        request_body["attributes"] = list(requested_attributes)
 
     try:
         response = await request(
@@ -173,9 +203,9 @@ async def list_files_recursively(
             json_body=request_body,
         )
     except OnedataApiError as e:
-        await _raise_invalid_space_error_if_needed(e)
+        await _raise_invalid_space_error_if_needed(e, parent_id_or_path)
         raise
-    return response["body"]
+    return _strip_deprecated_fields_in_list(response["body"], "files")
 
 
 async def download_file(file_id_or_path: str) -> bytes:
