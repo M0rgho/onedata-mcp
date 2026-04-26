@@ -1,0 +1,360 @@
+from urllib.parse import quote
+
+import pytest
+from pytest_httpx import HTTPXMock
+
+from onedata_mcp.api import files
+from onedata_mcp.utils import OnedataInvalidSpaceError
+
+
+def _set_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("ONEDATA_ONEPROVIDER_HOST", "https://provider.example")
+    monkeypatch.setenv("ONEDATA_ONEPROVIDER_TOKEN", "token")
+    monkeypatch.setenv("ONEDATA_ONEZONE_HOST", "https://onezone.example")
+    monkeypatch.setenv("ONEDATA_ONEZONE_TOKEN", "token")
+    monkeypatch.setenv("ONEDATA_ALLOW_INSECURE_TLS", "false")
+
+
+def _lookup_url(path: str) -> str:
+    return f"https://provider.example/api/v3/oneprovider/lookup-file-id/{quote(path, safe='')}"
+
+
+@pytest.mark.asyncio
+async def test_get_file_id_encodes_path_and_returns_id(
+    monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
+) -> None:
+    _set_env(monkeypatch)
+    httpx_mock.add_response(
+        method="POST",
+        url=_lookup_url("/space/my dir"),
+        json={"fileId": "fid-123"},
+    )
+
+    result = await files.get_file_id("/space/my dir")
+
+    assert result == "fid-123"
+
+
+@pytest.mark.asyncio
+async def test_get_file_id_maps_enoent_to_file_not_found(
+    monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
+) -> None:
+    _set_env(monkeypatch)
+    httpx_mock.add_response(
+        method="POST",
+        url=_lookup_url("/space/missing"),
+        status_code=400,
+        json={"error": {"details": {"errno": "enoent"}}},
+    )
+
+    with pytest.raises(FileNotFoundError):
+        await files.get_file_id("/space/missing")
+
+
+@pytest.mark.asyncio
+async def test_get_file_attributes_sends_selected_attributes(
+    monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
+) -> None:
+    _set_env(monkeypatch)
+    httpx_mock.add_response(
+        method="POST",
+        url=_lookup_url("/space/path"),
+        json={"fileId": "file-id"},
+    )
+    httpx_mock.add_response(
+        method="GET",
+        url="https://provider.example/api/v3/oneprovider/data/file-id",
+        json={"name": "x"},
+    )
+
+    result = await files.get_file_attributes("/space/path", attributes=["name", "size"])
+
+    assert result == {"name": "x"}
+    requests = httpx_mock.get_requests()
+    assert requests[1].method == "GET"
+    assert requests[1].url.path == "/api/v3/oneprovider/data/file-id"
+    assert requests[1].content == b'{"attributes":["name","size"]}'
+
+
+@pytest.mark.asyncio
+async def test_list_children_rejects_deprecated_attribute_names(
+    monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
+) -> None:
+    _set_env(monkeypatch)
+    httpx_mock.add_response(
+        method="POST",
+        url=_lookup_url("/space/path"),
+        json={"fileId": "parent-id"},
+    )
+
+    with pytest.raises(ValueError, match="Deprecated attribute names"):
+        await files.list_children("/space/path", attributes=["file_id"], limit=10, offset=0)
+
+
+@pytest.mark.asyncio
+async def test_list_files_recursively_rejects_deprecated_attribute_names(
+    monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
+) -> None:
+    _set_env(monkeypatch)
+    httpx_mock.add_response(
+        method="POST",
+        url=_lookup_url("/space/path"),
+        json={"fileId": "parent-id"},
+    )
+
+    with pytest.raises(ValueError, match="Deprecated attribute names"):
+        await files.list_files_recursively("/space/path", attributes=["mode"], limit=10)
+
+
+@pytest.mark.asyncio
+async def test_list_files_recursively_formats_invalid_space_error_with_hints(
+    monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
+) -> None:
+    _set_env(monkeypatch)
+    httpx_mock.add_response(
+        method="GET",
+        url="https://provider.example/api/v3/oneprovider/data/dsadas/files",
+        status_code=400,
+        json={
+            "error": {
+                "id": "spaceNotSupportedBy",
+                "details": {"spaceId": "dsadas", "providerId": "provider-1"},
+            }
+        },
+    )
+    httpx_mock.add_response(
+        method="GET",
+        url="https://onezone.example/api/v3/onezone/spaces",
+        json={"spaces": ["s1", "s2"]},
+    )
+    httpx_mock.add_response(
+        method="GET",
+        url="https://onezone.example/api/v3/onezone/spaces/s1",
+        json={"name": "Alpha"},
+    )
+    httpx_mock.add_response(
+        method="GET",
+        url="https://onezone.example/api/v3/onezone/spaces/s2",
+        json={"name": "Beta"},
+    )
+
+    with pytest.raises(OnedataInvalidSpaceError, match="Space does not exist") as exc:
+        await files.list_files_recursively("dsadas", limit=10)
+
+    assert "Available spaces: Alpha, Beta." in str(exc.value)
+
+
+@pytest.mark.asyncio
+async def test_list_children_formats_invalid_space_error_with_hints(
+    monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
+) -> None:
+    _set_env(monkeypatch)
+    httpx_mock.add_response(
+        method="GET",
+        url="https://provider.example/api/v3/oneprovider/data/dsadas/children",
+        status_code=400,
+        json={
+            "error": {
+                "id": "spaceNotSupportedBy",
+                "details": {"spaceId": "dsadas", "providerId": "provider-1"},
+            }
+        },
+    )
+    httpx_mock.add_response(
+        method="GET",
+        url="https://onezone.example/api/v3/onezone/spaces",
+        json={"spaces": ["s1"]},
+    )
+    httpx_mock.add_response(
+        method="GET",
+        url="https://onezone.example/api/v3/onezone/spaces/s1",
+        json={"name": "Alpha"},
+    )
+
+    with pytest.raises(OnedataInvalidSpaceError, match="Space does not exist") as exc:
+        await files.list_children("dsadas", limit=10, offset=0)
+
+    assert "Available spaces: Alpha." in str(exc.value)
+
+
+@pytest.mark.asyncio
+async def test_download_file_rejects_directory(
+    monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
+) -> None:
+    _set_env(monkeypatch)
+    httpx_mock.add_response(
+        method="POST",
+        url=_lookup_url("/space/dir"),
+        json={"fileId": "fid-dir"},
+        is_reusable=True,
+    )
+    httpx_mock.add_response(
+        method="GET",
+        url="https://provider.example/api/v3/oneprovider/data/fid-dir",
+        json={"type": "DIR", "size": 10},
+    )
+
+    with pytest.raises(ValueError, match="directory"):
+        await files.download_file("/space/dir")
+
+
+@pytest.mark.asyncio
+async def test_download_file_rejects_large_files(
+    monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
+) -> None:
+    _set_env(monkeypatch)
+    httpx_mock.add_response(
+        method="POST",
+        url=_lookup_url("/space/big"),
+        json={"fileId": "fid-big"},
+        is_reusable=True,
+    )
+    httpx_mock.add_response(
+        method="GET",
+        url="https://provider.example/api/v3/oneprovider/data/fid-big",
+        json={"type": "REG", "size": 6 * 1024 * 1024},
+    )
+
+    with pytest.raises(ValueError, match="too large"):
+        await files.download_file("/space/big")
+
+
+@pytest.mark.asyncio
+async def test_download_file_uses_httpx_async_client(
+    monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
+) -> None:
+    _set_env(monkeypatch)
+    httpx_mock.add_response(
+        method="POST",
+        url=_lookup_url("/space/file.txt"),
+        json={"fileId": "fid-1"},
+        is_reusable=True,
+    )
+    httpx_mock.add_response(
+        method="GET",
+        url="https://provider.example/api/v3/oneprovider/data/fid-1",
+        json={"type": "REG", "size": 3},
+    )
+    httpx_mock.add_response(
+        method="GET",
+        url="https://provider.example/api/v3/oneprovider/data/fid-1/content",
+        text="abc",
+        headers={"Content-Type": "text/plain"},
+    )
+
+    result = await files.download_file("/space/file.txt")
+
+    assert result == b"abc"
+    content_req = httpx_mock.get_requests()[-1]
+    assert content_req.url.path == "/api/v3/oneprovider/data/fid-1/content"
+    assert content_req.headers["Accept"] == "*/*"
+    assert "Content-Type" not in content_req.headers
+
+
+@pytest.mark.asyncio
+async def test_get_file_metadata_fetches_each_type_with_rdf_accept_header(
+    monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
+) -> None:
+    _set_env(monkeypatch)
+    httpx_mock.add_response(
+        method="POST",
+        url=_lookup_url("/space/a"),
+        json={"fileId": "fid-meta"},
+    )
+    httpx_mock.add_response(
+        method="GET",
+        url="https://provider.example/api/v3/oneprovider/data/fid-meta/metadata/json",
+        json={"k": "v"},
+    )
+    httpx_mock.add_response(
+        method="GET",
+        url="https://provider.example/api/v3/oneprovider/data/fid-meta/metadata/rdf",
+        text="<rdf/>",
+        headers={"Content-Type": "application/rdf+xml"},
+    )
+    httpx_mock.add_response(
+        method="GET",
+        url="https://provider.example/api/v3/oneprovider/data/fid-meta/metadata/xattrs",
+        json={"x": "1"},
+    )
+
+    result = await files.get_file_metadata("/space/a", ["json", "rdf", "xattrs"])
+
+    assert result["json"] == {"k": "v"}
+    assert result["rdf"] == "<rdf/>"
+    assert result["xattrs"] == {"x": "1"}
+    rdf_req = httpx_mock.get_requests()[2]
+    assert rdf_req.url.path == "/api/v3/oneprovider/data/fid-meta/metadata/rdf"
+    assert rdf_req.headers["Accept"] == "application/rdf+xml"
+
+
+@pytest.mark.asyncio
+async def test_get_file_metadata_maps_enodata_to_none(
+    monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
+) -> None:
+    _set_env(monkeypatch)
+    httpx_mock.add_response(
+        method="POST",
+        url=_lookup_url("/space/a"),
+        json={"fileId": "fid-meta"},
+    )
+    httpx_mock.add_response(
+        method="GET",
+        url="https://provider.example/api/v3/oneprovider/data/fid-meta/metadata/rdf",
+        status_code=400,
+        json={"error": {"details": {"errno": "enodata"}}},
+    )
+
+    result = await files.get_file_metadata("/space/a", ["rdf"])
+
+    assert result == {"rdf": None}
+
+
+@pytest.mark.asyncio
+async def test_get_file_metadata_rejects_invalid_type(
+    monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
+) -> None:
+    _set_env(monkeypatch)
+    httpx_mock.add_response(
+        method="POST",
+        url=_lookup_url("/space/a"),
+        json={"fileId": "fid-meta"},
+    )
+    with pytest.raises(ValueError, match="Unsupported metadata type"):
+        await files.get_file_metadata("/space/a", ["json", "bad"])
+
+
+@pytest.mark.asyncio
+async def test_set_file_metadata_sets_content_type(
+    monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
+) -> None:
+    _set_env(monkeypatch)
+    httpx_mock.add_response(
+        method="POST",
+        url=_lookup_url("/space/a"),
+        json={"fileId": "fid-set"},
+    )
+    httpx_mock.add_response(
+        method="PUT",
+        url="https://provider.example/api/v3/oneprovider/data/fid-set/metadata/rdf",
+        json={},
+    )
+    httpx_mock.add_response(
+        method="POST",
+        url=_lookup_url("/space/a"),
+        json={"fileId": "fid-set"},
+    )
+    httpx_mock.add_response(
+        method="PUT",
+        url="https://provider.example/api/v3/oneprovider/data/fid-set/metadata/json",
+        json={},
+    )
+
+    await files.set_file_metadata("/space/a", "rdf", "<rdf/>")
+    await files.set_file_metadata("/space/a", "json", '{"a":1}')
+
+    requests = httpx_mock.get_requests()
+    assert requests[1].headers["Content-Type"] == "application/rdf+xml"
+    assert requests[3].headers["Content-Type"] == "application/json"
+    assert requests[1].content == b"<rdf/>"
+    assert requests[3].content == b'{"a":1}'
