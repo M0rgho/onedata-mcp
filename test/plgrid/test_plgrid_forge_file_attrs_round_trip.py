@@ -10,6 +10,7 @@ from assertions_lib import (
 from e2e_types import E2EScenario
 from env_checks import forge_credentials_available, onedata_credentials_available
 from forge_harness import run_forge_scenario
+from plgrid_expected_answers import EXPECTED_FILE_BASENAME
 
 pytestmark = [
     pytest.mark.asyncio,
@@ -25,10 +26,6 @@ pytestmark = [
     ),
 ]
 
-# Reference PLGrid tenant: REG file used for get_file_attributes round-trip.
-_FILE_LOGICAL_PATH = "/krk-iu/bee_movie_script"
-_EXPECTED_BASENAME = "bee_movie_script"
-
 
 @pytest.mark.parametrize("tool_context_mode", ["minimal", "full"])
 async def test_file_attrs_round_trip_mentions_basename(
@@ -42,11 +39,12 @@ async def test_file_attrs_round_trip_mentions_basename(
     scenario = E2EScenario(
         name="round-trip-get-file-attributes",
         user_prompt=(
-            f"I need the actual filename for the object at `{_FILE_LOGICAL_PATH}` in Onedata. "
-            "What is it called (including extension)?"
+            "In my Onedata krk-iu space I have a plain-text file containing the "
+            "entire Bee Movie screenplay. "
+            "What filename (including extension) does Onedata report for that object?"
         ),
         required_tools=frozenset({"get_file_attributes"}),
-        allowed_tools_for_minimal_context=frozenset({"get_file_attributes"}),
+        allowed_tools_for_minimal_context=frozenset({"get_file_attributes", "list_children"}),
     )
 
     run = await run_forge_scenario(
@@ -62,6 +60,6 @@ async def test_file_attrs_round_trip_mentions_basename(
     assert run.metrics.all_tool_calls_ok
     assert_final_answer_contains_all(
         run,
-        [_EXPECTED_BASENAME],
+        [EXPECTED_FILE_BASENAME],
         hint="Basename must match the expected file on the reference tenant.",
     )

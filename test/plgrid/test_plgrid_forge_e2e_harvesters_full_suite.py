@@ -1,4 +1,4 @@
-"""Alias module: mirrors plan naming for harvester scenarios with enlarged tool-pack."""
+"""Harvester scenarios with an enlarged tool-pack (minimal vs full context)."""
 
 from __future__ import annotations
 
@@ -35,10 +35,6 @@ HARVESTER_SUITE = frozenset(
 )
 
 
-_EXPECTED_HARVESTER_ID = "38aead36531afe751f19ee8dbc1de4d7chb7d6"
-_EXPECTED_HARVESTER_INDEX_ID = "df3a594999a498af355cf487e28fec59chdedf"
-
-
 @pytest.mark.parametrize("tool_context_mode", ["minimal", "full"])
 async def test_harvesters_full_suite_parametrized(
     request: Any,
@@ -48,15 +44,15 @@ async def test_harvesters_full_suite_parametrized(
     forge_base_url: str,
     tool_context_mode: str,
 ) -> None:
-    hid, iid = _EXPECTED_HARVESTER_ID, _EXPECTED_HARVESTER_INDEX_ID
     scenario = E2EScenario(
         name="harvester-full-suite-twice-named",
         user_prompt=(
-            f"I need insight from harvester index data for harvester `{hid}` "
-            f"and index `{iid}`. "
-            "Discover the index schema using the tools, then build a valid query "
-            "yourself and run it. "
-            "You may look at related context (spaces, harvesters) if that helps. "
+            "I need insight from the harvester that ingests our openfoodfacts-images "
+            "workspace—specifically from its generic search index (the one normally "
+            "used for broad file metadata lookup). "
+            "Discover the index schema with the tools, assemble a small valid request "
+            "that matches what the plugin expects, and run it. "
+            "You may list spaces or harvesters if that helps orient you. "
             "Summarise the notable fields or values in the response."
         ),
         required_tools=frozenset({"get_harvester_index_schema", "query_harvester_index"}),

@@ -22,14 +22,18 @@ pytestmark = [
     ),
 ]
 
-EXAMPLE_QUERY: dict[str, str] = {"method": "get", "path": "resource_id"}
-
-_EXPECTED_HARVESTER_ID = "38aead36531afe751f19ee8dbc1de4d7chb7d6"
-_EXPECTED_HARVESTER_INDEX_ID = "df3a594999a498af355cf487e28fec59chdedf"
+# Discovery + schema + query: model must find IDs and build the plugin payload itself.
+_MINIMAL_HARVESTER_TOOLS = frozenset(
+    {
+        "list_user_harvesters",
+        "get_harvester_index_schema",
+        "query_harvester_index",
+    }
+)
 
 
 @pytest.mark.parametrize("tool_context_mode", ["minimal", "full"])
-async def test_harvesters_only_query_tool_in_context(
+async def test_harvesters_minimal_context_discovers_then_queries(
     request: Any,
     mcp_application: Any,
     forge_api_key: str,
@@ -37,17 +41,15 @@ async def test_harvesters_only_query_tool_in_context(
     forge_base_url: str,
     tool_context_mode: str,
 ) -> None:
-    hid, iid = _EXPECTED_HARVESTER_ID, _EXPECTED_HARVESTER_INDEX_ID
     scenario = E2EScenario(
         name="harvester-min-tools",
         user_prompt=(
-            f"I'm supposed to execute a harvester index query with harvester `{hid}`, "
-            f"index `{iid}`, and body {EXAMPLE_QUERY!r}. "
-            "Can you run exactly that lookup and summarise what came back?"
+            "Query the Onedata harvester backing our openfoodfacts-images-style workspace "
+            "with a straightforward index lookup, and give a brief summary of the result."
         ),
         required_tools=frozenset({"query_harvester_index"}),
-        allowed_tools_for_minimal_context=frozenset({"query_harvester_index"}),
-        max_tool_rounds=12,
+        allowed_tools_for_minimal_context=_MINIMAL_HARVESTER_TOOLS,
+        max_tool_rounds=14,
     )
 
     outcome = await run_forge_scenario(
@@ -62,6 +64,6 @@ async def test_harvesters_only_query_tool_in_context(
     assert_required_tools_and_optional_policy(outcome)
     assert (outcome.final_assistant_text or "").strip(), "Model should summarise tool output."
     if tool_context_mode == "minimal":
-        assert outcome.metrics.tools_in_context_count == 1
+        assert outcome.metrics.tools_in_context_count == len(_MINIMAL_HARVESTER_TOOLS)
     else:
         assert outcome.metrics.tools_in_context_count >= 10
