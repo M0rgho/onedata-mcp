@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 import sys
 from pathlib import Path
@@ -18,6 +19,22 @@ if str(_PLGRID_DIR) not in sys.path:
 
 from forge_logging import patch_forge_trace_test_result  # noqa: E402
 from forge_pytest_integration import LAST_FORGE_RUN  # noqa: E402
+
+
+class _SuppressFastMCPValidationExceptionLogs(logging.Filter):
+    """Drop fastmcp's logger.exception() for Pydantic tool-arg validation (very noisy in e2e)."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return not (
+            record.exc_info
+            and record.getMessage().startswith("Error validating tool ")
+        )
+
+
+def pytest_configure(config: pytest.Config) -> None:  # noqa: ARG001
+    for name in ("httpx", "httpcore"):
+        logging.getLogger(name).setLevel(logging.WARNING)
+    logging.getLogger("fastmcp.server.server").addFilter(_SuppressFastMCPValidationExceptionLogs())
 
 
 @pytest.hookimpl(wrapper=True)
