@@ -25,10 +25,7 @@ class _SuppressFastMCPValidationExceptionLogs(logging.Filter):
     """Drop fastmcp's logger.exception() for Pydantic tool-arg validation (very noisy in e2e)."""
 
     def filter(self, record: logging.LogRecord) -> bool:
-        return not (
-            record.exc_info
-            and record.getMessage().startswith("Error validating tool ")
-        )
+        return not (record.exc_info and record.getMessage().startswith("Error validating tool "))
 
 
 def pytest_configure(config: pytest.Config) -> None:  # noqa: ARG001

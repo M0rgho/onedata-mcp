@@ -1,6 +1,5 @@
-from urllib.parse import quote
-
 import re
+from urllib.parse import quote
 
 import pytest
 from pytest_httpx import HTTPXMock

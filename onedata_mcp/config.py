@@ -1,7 +1,7 @@
 import logging
 import os
 from dataclasses import dataclass
-from typing import Dict
+
 from dotenv import load_dotenv
 
 from .utils import is_valid_url
@@ -10,7 +10,7 @@ from .utils import is_valid_url
 @dataclass(frozen=True)
 class OnedataConfig:
     base_url: str
-    auth_headers: Dict[str, str]
+    auth_headers: dict[str, str]
     verify_ssl: bool
 
 
