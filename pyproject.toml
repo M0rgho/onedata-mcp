@@ -20,6 +20,7 @@ build-backend = "hatchling.build"
 [dependency-groups]
 dev = [
     "mcp[cli]>=1.27.0",
+    "openai>=1.88.0",
     "pytest>=8.4.2",
     "pytest-asyncio>=1.2.0",
     "pytest-httpx>=0.35.0",
@@ -42,7 +43,13 @@ indent-style = "space"
 reportUnusedFunction = "none"
 
 [tool.pytest.ini_options]
+# Single-process only: avoid pytest-xdist multi-worker runs even if installed globally / in tooling.
+addopts = [ "-p", "no:xdist" ]
 asyncio_mode = "strict"
 asyncio_default_test_loop_scope = "function"
 asyncio_default_fixture_loop_scope = "function"
 testpaths = [ "test" ]
+markers = [
+    "e2e: End-to-end PLGrid Forge LLM + MCP tests (requires PLGRID_FORGE_* env; some need Onedata)",
+    "onedata_integration: requires live Onezone / Oneprovider",
+]
