@@ -12,8 +12,8 @@ from onedata_mcp.api.files import (
     get_file_id,
     get_file_metadata,
     grep_file_content,
-    list_children,
-    list_files_recursively,
+    list_files,
+    list_files_recursive,
     set_file_metadata,
 )
 
@@ -56,8 +56,8 @@ def register_module(mcp: FastMCP) -> None:
         """
         return await get_file_attributes(file_id_or_path, attributes=attributes)
 
-    @mcp.tool(name="list_children", annotations=ToolAnnotations(readOnlyHint=True))
-    async def mcp_list_children(
+    @mcp.tool(name="list_files", annotations=ToolAnnotations(readOnlyHint=True))
+    async def mcp_list_files(
         parent_id_or_path: str = Field(
             description="File id or path to the parent file in format /<space_name>/<path_to_file>"
         ),
@@ -73,11 +73,11 @@ def register_module(mcp: FastMCP) -> None:
             default=10,
             ge=1,
             le=100,
-            description="Maximum number of children",
+            description="Maximum number of items to return (files and subdirectories)",
         ),
         offset: int = Field(
             default=0,
-            description="Starting offset of the children",
+            description="Offset into the shallow listing page",
         ),
         token: Optional[str] = Field(
             default=None,
@@ -85,15 +85,14 @@ def register_module(mcp: FastMCP) -> None:
         ),
     ) -> dict[str, Any]:
         """
-        List children (files and directories) of a given file id or path.
-
+        Shallow listing: a single level of files and subdirectories under the path or id.
         """
-        return await list_children(
+        return await list_files(
             parent_id_or_path, attributes=attributes, limit=limit, offset=offset, token=token
         )
 
-    @mcp.tool(name="list_files_recursively", annotations=ToolAnnotations(readOnlyHint=True))
-    async def mcp_list_files_recursively(
+    @mcp.tool(name="list_files_recursive", annotations=ToolAnnotations(readOnlyHint=True))
+    async def mcp_list_files_recursive(
         parent_id_or_path: str = Field(
             description="File id or path to the parent file in format /<space_name>/<path_to_file>"
         ),
@@ -129,7 +128,7 @@ def register_module(mcp: FastMCP) -> None:
         """
         Recursively list non-directory files under a given file id or path.
         """
-        return await list_files_recursively(
+        return await list_files_recursive(
             parent_id_or_path,
             attributes=attributes,
             limit=limit,

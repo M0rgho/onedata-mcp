@@ -207,7 +207,7 @@ async def _normalize_path_to_file_id(file_id_or_path: str) -> str:
     return await get_file_id(file_id_or_path)
 
 
-async def list_children(
+async def list_files(
     parent_id_or_path: str,
     *,
     attributes: Iterable[str] | None = DEFAULT_FILE_ATTRIBUTE_KEYS,
@@ -237,7 +237,7 @@ async def list_children(
     return _strip_deprecated_fields_in_list(response["body"], "children")
 
 
-async def list_files_recursively(
+async def list_files_recursive(
     parent_id_or_path: str,
     *,
     attributes: Iterable[str] | None = DEFAULT_FILE_ATTRIBUTE_KEYS,
