@@ -9,21 +9,45 @@ from onedata_mcp.api.spaces import list_user_spaces
 from onedata_mcp.config import get_oneprovider_config
 from onedata_mcp.utils import OnedataApiError, OnedataInvalidSpaceError, request
 
-DEFAULT_FILE_ATTRIBUTE_KEYS = (
-    # "fileId",
-    "path",
-    # "parentFileId",
-    "name",
-    "type",
-    "size",
-    "posixPermissions",
-    # "ownerUserId",
-    # "originProviderId",
-    "atime",
-    "mtime",
-    # "ctime",
-    # "hardlinkCount",
+ONEPROVIDER_FILE_LISTING_ALLOWED_NAMES = frozenset(
+    {
+        "activePermissionsType",
+        "acl",
+        "aggregateQosStatus",
+        "archiveRecallRootFileId",
+        "atime",
+        "conflictingName",
+        "creationTime",
+        "ctime",
+        "directShareIds",
+        "displayGid",
+        "displayUid",
+        "effDatasetInheritancePath",
+        "effDatasetProtectionFlags",
+        "effProtectionFlags",
+        "effQosInheritancePath",
+        "fileId",
+        "hardlinkCount",
+        "hasCustomMetadata",
+        "hasJsonMetadata",
+        "index",
+        "isFullyReplicatedLocally",
+        "jsonMetadata",
+        "localReplicationRate",
+        "mtime",
+        "name",
+        "originProviderId",
+        "ownerUserId",
+        "parentFileId",
+        "path",
+        "posixPermissions",
+        "size",
+        "symlinkValue",
+        "type",
+    }
 )
+
+_MINIMAL_FALLBACK_ATTRIBUTES = ("name", "type", "path", "size")
 
 DEPRECATED_ATTRIBUTE_NAME_MAPPING = {
     "file_id": "fileId",
@@ -37,6 +61,16 @@ DEPRECATED_ATTRIBUTE_NAME_MAPPING = {
     "owner_id": "ownerUserId",
     "hardlinks_count": "hardlinkCount",
 }
+
+DEFAULT_FILE_ATTRIBUTE_KEYS = (
+    "path",
+    "name",
+    "type",
+    "size",
+    "posixPermissions",
+    "atime",
+    "mtime",
+)
 
 
 def _reject_deprecated_attributes(attributes: Iterable[str] | None) -> None:
@@ -53,6 +87,39 @@ def _reject_deprecated_attributes(attributes: Iterable[str] | None) -> None:
     raise ValueError(
         f"Deprecated attribute names are not supported. Use the new names instead: {replacements}"
     )
+
+
+def _is_allowed_bulk_list_attribute(name: str) -> bool:
+    return name.startswith("xattr.") or name in ONEPROVIDER_FILE_LISTING_ALLOWED_NAMES
+
+
+def _sanitize_listing_attributes(attributes: Iterable[str] | None) -> list[str]:
+    """
+    Oneprovider rejects unknown ``attributes`` on ``/children`` and ``/files`` with 400.
+
+    Canonicalize legacy synonyms, drop values outside the server's supported set,
+    then fall back to a minimal safe tuple if nothing remains.
+    """
+
+    seq = tuple(attributes or DEFAULT_FILE_ATTRIBUTE_KEYS)
+    seen: dict[str, None] = {}
+    result: list[str] = []
+    for raw in seq:
+        key = DEPRECATED_ATTRIBUTE_NAME_MAPPING.get(raw, raw)
+        if not _is_allowed_bulk_list_attribute(key):
+            logger.debug(f"Ignoring unsupported file listing attribute: {raw!r} -> {key!r}")
+            continue
+        if key not in seen:
+            seen[key] = None
+            result.append(key)
+    if not result:
+        for k in DEFAULT_FILE_ATTRIBUTE_KEYS:
+            nk = DEPRECATED_ATTRIBUTE_NAME_MAPPING.get(k, k)
+            if _is_allowed_bulk_list_attribute(nk):
+                result.append(nk)
+    if not result:
+        result.extend(list(dict.fromkeys(_MINIMAL_FALLBACK_ATTRIBUTES)))
+    return result
 
 
 def _strip_deprecated_fields_in_list(
@@ -135,8 +202,7 @@ async def get_file_attributes(
 
 
 async def _normalize_path_to_file_id(file_id_or_path: str) -> str:
-    if not file_id_or_path.startswith("/"):
-        return file_id_or_path
+    """Resolve a logical path or opaque id through lookup-file-id (always via path form)."""
 
     return await get_file_id(file_id_or_path)
 
@@ -151,13 +217,12 @@ async def list_children(
 ) -> dict[str, Any]:
     config = get_oneprovider_config()
     parent_id = await _normalize_path_to_file_id(parent_id_or_path)
-    requested_attributes = tuple[str, ...](attributes or DEFAULT_FILE_ATTRIBUTE_KEYS)
-    _reject_deprecated_attributes(requested_attributes)
+    requested_attributes = _sanitize_listing_attributes(attributes)
     request_body: dict[str, Any] = {"limit": limit, "offset": offset}
     if token is not None:
         request_body["token"] = token
     if requested_attributes:
-        request_body["attributes"] = list(requested_attributes)
+        request_body["attributes"] = requested_attributes
 
     try:
         response = await request(
@@ -183,8 +248,7 @@ async def list_files_recursively(
 ) -> dict[str, Any]:
     config = get_oneprovider_config()
     parent_id = await _normalize_path_to_file_id(parent_id_or_path)
-    requested_attributes = tuple[str, ...](attributes or DEFAULT_FILE_ATTRIBUTE_KEYS)
-    _reject_deprecated_attributes(requested_attributes)
+    requested_attributes = _sanitize_listing_attributes(attributes)
     request_body: dict[str, Any] = {"limit": limit}
     if token is not None:
         request_body["token"] = token
@@ -193,7 +257,7 @@ async def list_files_recursively(
     if prefix is not None:
         request_body["prefix"] = prefix
     if requested_attributes:
-        request_body["attributes"] = list(requested_attributes)
+        request_body["attributes"] = requested_attributes
 
     try:
         response = await request(

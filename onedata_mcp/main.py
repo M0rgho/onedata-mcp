@@ -45,7 +45,7 @@ def _create_onedata_mcp_server() -> FastMCP:
     - Spaces: top-level shared workspaces grouping files, users, and providers.
     - Providers: services that store data and expose Oneprovider APIs.
     - Files/directories: data objects addressable by file id
-      or logical path (<space_name>/<path_to_file>).
+      or logical path (/<space_name>/<path_to_file>).
     """,
     )
 

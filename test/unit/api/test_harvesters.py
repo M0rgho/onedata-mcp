@@ -100,3 +100,32 @@ async def test_query_harvester_index_posts_query_body(
     assert req.method == "POST"
     assert req.url.path == "/api/v3/onezone/harvesters/h1/indices/idx1/query"
     assert req.content == b'{"method":"get","path":"resource_id"}'
+
+
+@pytest.mark.asyncio
+async def test_query_harvester_index_accepts_json_string_query(
+    monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
+) -> None:
+    _set_env(monkeypatch)
+    httpx_mock.add_response(
+        method="POST",
+        url="https://onezone.example/api/v3/onezone/harvesters/h1/indices/idx1/query",
+        json={"hits": {"total": 1}},
+    )
+
+    payload_str = '{"method": "get", "path": "_mapping"}'
+    result = await harvesters.query_harvester_index("h1", "idx1", payload_str)
+
+    assert result["hits"]["total"] == 1
+    req = httpx_mock.get_requests()[0]
+    assert req.content == b'{"method":"get","path":"_mapping"}'
+
+
+def test_coerce_harvesters_index_query_dict_passthrough() -> None:
+    d = {"method": "post", "path": "_search", "body": "{}"}
+    assert harvesters.coerce_harvesters_index_query(d) is d
+
+
+def test_coerce_harvesters_index_query_rejects_non_object_json() -> None:
+    with pytest.raises(TypeError, match="deserialize to an object"):
+        harvesters.coerce_harvesters_index_query("[1]")

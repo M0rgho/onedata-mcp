@@ -1,3 +1,4 @@
+import json
 import re
 from urllib.parse import quote
 
@@ -155,7 +156,7 @@ async def test_list_files_recursively_applies_default_attributes_when_none(
 
 
 @pytest.mark.asyncio
-async def test_list_children_rejects_deprecated_attribute_names(
+async def test_list_children_canonicalizes_deprecated_attribute_aliases(
     monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
 ) -> None:
     _set_env(monkeypatch)
@@ -164,13 +165,23 @@ async def test_list_children_rejects_deprecated_attribute_names(
         url=_lookup_url("/space/path"),
         json={"fileId": "parent-id"},
     )
+    httpx_mock.add_response(
+        method="GET",
+        url="https://provider.example/api/v3/oneprovider/data/parent-id/children",
+        json={"children": [], "isLast": True, "nextPageToken": None},
+    )
 
-    with pytest.raises(ValueError, match="Deprecated attribute names"):
-        await files.list_children("/space/path", attributes=["file_id"], limit=10, offset=0)
+    await files.list_children("/space/path", attributes=["file_id"], limit=10, offset=0)
+
+    request = next(
+        r for r in httpx_mock.get_requests() if r.url.path.endswith("/data/parent-id/children")
+    )
+    payload = json.loads(request.content.decode("utf-8"))
+    assert payload["attributes"] == ["fileId"]
 
 
 @pytest.mark.asyncio
-async def test_list_files_recursively_rejects_deprecated_attribute_names(
+async def test_list_children_drops_unknown_attributes(
     monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
 ) -> None:
     _set_env(monkeypatch)
@@ -179,9 +190,49 @@ async def test_list_files_recursively_rejects_deprecated_attribute_names(
         url=_lookup_url("/space/path"),
         json={"fileId": "parent-id"},
     )
+    httpx_mock.add_response(
+        method="GET",
+        url="https://provider.example/api/v3/oneprovider/data/parent-id/children",
+        json={"children": [], "isLast": True, "nextPageToken": None},
+    )
 
-    with pytest.raises(ValueError, match="Deprecated attribute names"):
-        await files.list_files_recursively("/space/path", attributes=["mode"], limit=10)
+    await files.list_children(
+        "/space/path",
+        attributes=["notAnApiField", "name", "xattr.custom"],
+        limit=10,
+        offset=0,
+    )
+
+    request = next(
+        r for r in httpx_mock.get_requests() if r.url.path.endswith("/data/parent-id/children")
+    )
+    payload = json.loads(request.content.decode("utf-8"))
+    assert payload["attributes"] == ["name", "xattr.custom"]
+
+
+@pytest.mark.asyncio
+async def test_list_files_recursively_canonicalizes_deprecated_attribute_aliases(
+    monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
+) -> None:
+    _set_env(monkeypatch)
+    httpx_mock.add_response(
+        method="POST",
+        url=_lookup_url("/space/path"),
+        json={"fileId": "parent-id"},
+    )
+    httpx_mock.add_response(
+        method="GET",
+        url="https://provider.example/api/v3/oneprovider/data/parent-id/files",
+        json={"files": [], "isLast": True, "nextPageToken": None},
+    )
+
+    await files.list_files_recursively("/space/path", attributes=["mode"], limit=10)
+
+    request = next(
+        r for r in httpx_mock.get_requests() if r.url.path.endswith("/data/parent-id/files")
+    )
+    payload = json.loads(request.content.decode("utf-8"))
+    assert payload["attributes"] == ["posixPermissions"]
 
 
 @pytest.mark.asyncio
@@ -253,6 +304,11 @@ async def test_list_files_recursively_formats_invalid_space_error_with_hints(
 ) -> None:
     _set_env(monkeypatch)
     httpx_mock.add_response(
+        method="POST",
+        url=_lookup_url("/dsadas"),
+        json={"fileId": "dsadas"},
+    )
+    httpx_mock.add_response(
         method="GET",
         url="https://provider.example/api/v3/oneprovider/data/dsadas/files",
         status_code=400,
@@ -276,6 +332,11 @@ async def test_list_children_formats_invalid_space_error_with_hints(
     monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
 ) -> None:
     _set_env(monkeypatch)
+    httpx_mock.add_response(
+        method="POST",
+        url=_lookup_url("/dsadas"),
+        json={"fileId": "dsadas"},
+    )
     httpx_mock.add_response(
         method="GET",
         url="https://provider.example/api/v3/oneprovider/data/dsadas/children",
