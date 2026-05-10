@@ -19,7 +19,7 @@ def register_module(mcp: FastMCP) -> None:
         """
         List harvesters available to the current user.
 
-        Each harvester embeds detailed index metadata with schema omitted.
+        Each harvester embeds detailed index metadata and attached spaces.
         """
         return await list_user_harvesters()
 

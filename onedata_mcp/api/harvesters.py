@@ -44,6 +44,13 @@ async def list_harvester_indices(harvester_id: str) -> list[str]:
     return response["body"]["indices"]
 
 
+async def list_harvester_spaces(harvester_id: str) -> list[str]:
+    """Space ids linked to the harvester (metadata sources). See ``GET /harvesters/{id}/spaces``."""
+    config = get_onezone_config()
+    response = await request(config, "GET", f"/harvesters/{harvester_id}/spaces")
+    return response["body"]["spaces"]
+
+
 async def get_harvester_index(harvester_id: str, index_id: str) -> dict[str, Any]:
     config = get_onezone_config()
     response = await request(config, "GET", f"/harvesters/{harvester_id}/indices/{index_id}")
@@ -60,12 +67,16 @@ async def list_user_harvesters() -> list[dict[str, Any]]:
     harvester_ids = response["body"]["harvesters"]
 
     async def _fetch_harvester_with_indices(harvester_id: str) -> dict[str, Any]:
-        harvester = await get_user_harvester(harvester_id)
-        index_ids = await list_harvester_indices(harvester_id)
+        harvester, index_ids, attached_spaces = await asyncio.gather(
+            get_user_harvester(harvester_id),
+            list_harvester_indices(harvester_id),
+            list_harvester_spaces(harvester_id),
+        )
         index_details = await asyncio.gather(
             *(get_harvester_index(harvester_id, index_id) for index_id in index_ids)
         )
         harvester["indices"] = [_without_schema(index) for index in index_details]
+        harvester["attached_spaces"] = attached_spaces
         return harvester
 
     return await asyncio.gather(*(_fetch_harvester_with_indices(hid) for hid in harvester_ids))
