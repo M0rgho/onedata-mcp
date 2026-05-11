@@ -108,7 +108,7 @@ async def test_get_file_attributes_sends_selected_attributes(
 
 
 @pytest.mark.asyncio
-async def test_list_children_applies_default_attributes_when_none(
+async def test_list_files_applies_default_attributes_when_none(
     monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
 ) -> None:
     _set_env(monkeypatch)
@@ -123,7 +123,7 @@ async def test_list_children_applies_default_attributes_when_none(
         json={"children": [], "isLast": True, "nextPageToken": None},
     )
 
-    await files.list_children("/space/path", attributes=None, limit=10, offset=0)
+    await files.list_files("/space/path", attributes=None, limit=10, offset=0)
 
     request = next(
         r for r in httpx_mock.get_requests() if r.url.path.endswith("/data/parent-id/children")
@@ -132,7 +132,7 @@ async def test_list_children_applies_default_attributes_when_none(
 
 
 @pytest.mark.asyncio
-async def test_list_files_recursively_applies_default_attributes_when_none(
+async def test_list_files_recursive_applies_default_attributes_when_none(
     monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
 ) -> None:
     _set_env(monkeypatch)
@@ -147,7 +147,7 @@ async def test_list_files_recursively_applies_default_attributes_when_none(
         json={"files": [], "isLast": True, "nextPageToken": None},
     )
 
-    await files.list_files_recursively("/space/path", attributes=None, limit=10)
+    await files.list_files_recursive("/space/path", attributes=None, limit=10)
 
     request = next(
         r for r in httpx_mock.get_requests() if r.url.path.endswith("/data/parent-id/files")
@@ -156,7 +156,7 @@ async def test_list_files_recursively_applies_default_attributes_when_none(
 
 
 @pytest.mark.asyncio
-async def test_list_children_canonicalizes_deprecated_attribute_aliases(
+async def test_list_files_canonicalizes_deprecated_attribute_aliases(
     monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
 ) -> None:
     _set_env(monkeypatch)
@@ -171,7 +171,7 @@ async def test_list_children_canonicalizes_deprecated_attribute_aliases(
         json={"children": [], "isLast": True, "nextPageToken": None},
     )
 
-    await files.list_children("/space/path", attributes=["file_id"], limit=10, offset=0)
+    await files.list_files("/space/path", attributes=["file_id"], limit=10, offset=0)
 
     request = next(
         r for r in httpx_mock.get_requests() if r.url.path.endswith("/data/parent-id/children")
@@ -181,7 +181,7 @@ async def test_list_children_canonicalizes_deprecated_attribute_aliases(
 
 
 @pytest.mark.asyncio
-async def test_list_children_drops_unknown_attributes(
+async def test_list_files_drops_unknown_attributes(
     monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
 ) -> None:
     _set_env(monkeypatch)
@@ -196,7 +196,7 @@ async def test_list_children_drops_unknown_attributes(
         json={"children": [], "isLast": True, "nextPageToken": None},
     )
 
-    await files.list_children(
+    await files.list_files(
         "/space/path",
         attributes=["notAnApiField", "name", "xattr.custom"],
         limit=10,
@@ -211,7 +211,7 @@ async def test_list_children_drops_unknown_attributes(
 
 
 @pytest.mark.asyncio
-async def test_list_files_recursively_canonicalizes_deprecated_attribute_aliases(
+async def test_list_files_recursive_canonicalizes_deprecated_attribute_aliases(
     monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
 ) -> None:
     _set_env(monkeypatch)
@@ -226,7 +226,7 @@ async def test_list_files_recursively_canonicalizes_deprecated_attribute_aliases
         json={"files": [], "isLast": True, "nextPageToken": None},
     )
 
-    await files.list_files_recursively("/space/path", attributes=["mode"], limit=10)
+    await files.list_files_recursive("/space/path", attributes=["mode"], limit=10)
 
     request = next(
         r for r in httpx_mock.get_requests() if r.url.path.endswith("/data/parent-id/files")
@@ -236,7 +236,7 @@ async def test_list_files_recursively_canonicalizes_deprecated_attribute_aliases
 
 
 @pytest.mark.asyncio
-async def test_list_children_filters_deprecated_response_fields(
+async def test_list_files_filters_deprecated_response_fields(
     monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
 ) -> None:
     _set_env(monkeypatch)
@@ -258,7 +258,7 @@ async def test_list_children_filters_deprecated_response_fields(
         },
     )
 
-    result = await files.list_children("/space/path", limit=10, offset=0)
+    result = await files.list_files("/space/path", limit=10, offset=0)
 
     assert result["children"][0]["fileId"] == "new-id"
     assert "file_id" not in result["children"][0]
@@ -267,7 +267,7 @@ async def test_list_children_filters_deprecated_response_fields(
 
 
 @pytest.mark.asyncio
-async def test_list_files_recursively_filters_deprecated_response_fields(
+async def test_list_files_recursive_filters_deprecated_response_fields(
     monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
 ) -> None:
     _set_env(monkeypatch)
@@ -289,7 +289,7 @@ async def test_list_files_recursively_filters_deprecated_response_fields(
         },
     )
 
-    result = await files.list_files_recursively("/space/path", limit=10)
+    result = await files.list_files_recursive("/space/path", limit=10)
 
     assert result["files"][0]["fileId"] == "new-id"
     assert "file_id" not in result["files"][0]
@@ -299,7 +299,7 @@ async def test_list_files_recursively_filters_deprecated_response_fields(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("available_spaces", [["Alpha", "Beta"]], indirect=True)
-async def test_list_files_recursively_formats_invalid_space_error_with_hints(
+async def test_list_files_recursive_formats_invalid_space_error_with_hints(
     monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
 ) -> None:
     _set_env(monkeypatch)
@@ -321,14 +321,14 @@ async def test_list_files_recursively_formats_invalid_space_error_with_hints(
     )
 
     with pytest.raises(OnedataInvalidSpaceError, match='Space "dsadas" does not exist') as exc:
-        await files.list_files_recursively("dsadas", limit=10)
+        await files.list_files_recursive("dsadas", limit=10)
 
     assert 'Available spaces: "Alpha", "Beta".' in str(exc.value)
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("available_spaces", [["Alpha"]], indirect=True)
-async def test_list_children_formats_invalid_space_error_with_hints(
+async def test_list_files_formats_invalid_space_error_with_hints(
     monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
 ) -> None:
     _set_env(monkeypatch)
@@ -350,7 +350,7 @@ async def test_list_children_formats_invalid_space_error_with_hints(
     )
 
     with pytest.raises(OnedataInvalidSpaceError, match='Space "dsadas" does not exist') as exc:
-        await files.list_children("dsadas", limit=10, offset=0)
+        await files.list_files("dsadas", limit=10, offset=0)
 
     assert 'Available spaces: "Alpha".' in str(exc.value)
 
@@ -529,9 +529,31 @@ async def test_set_file_metadata_sets_content_type(
         url="https://provider.example/api/v3/oneprovider/data/fid-set/metadata/json",
         json={},
     )
+    httpx_mock.add_response(
+        method="POST",
+        url=_lookup_url("/space/a"),
+        json={"fileId": "fid-set"},
+    )
+    httpx_mock.add_response(
+        method="PUT",
+        url="https://provider.example/api/v3/oneprovider/data/fid-set/metadata/json",
+        json={},
+    )
+    httpx_mock.add_response(
+        method="POST",
+        url=_lookup_url("/space/a"),
+        json={"fileId": "fid-set"},
+    )
+    httpx_mock.add_response(
+        method="PUT",
+        url="https://provider.example/api/v3/oneprovider/data/fid-set/metadata/xattrs",
+        json={},
+    )
 
     await files.set_file_metadata("/space/a", "rdf", "<rdf/>")
     await files.set_file_metadata("/space/a", "json", '{"a":1}')
+    await files.set_file_metadata("/space/a", "json", {"b": 2})
+    await files.set_file_metadata("/space/a", "xattrs", {"license": "CC-0"})
 
     put_requests = [
         r
@@ -540,8 +562,97 @@ async def test_set_file_metadata_sets_content_type(
     ]
     assert put_requests[0].headers["Content-Type"] == "application/rdf+xml"
     assert put_requests[1].headers["Content-Type"] == "application/json"
+    assert put_requests[2].headers["Content-Type"] == "application/json"
+    assert put_requests[3].headers["Content-Type"] == "application/json"
     assert put_requests[0].content == b"<rdf/>"
     assert put_requests[1].content == b'{"a":1}'
+    assert put_requests[2].content == b'{"b": 2}'
+    assert put_requests[3].content == b'{"license": "CC-0"}'
+
+
+@pytest.mark.asyncio
+async def test_set_file_xattrs_writes_xattrs_body(
+    monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
+) -> None:
+    _set_env(monkeypatch)
+    httpx_mock.add_response(
+        method="POST",
+        url=_lookup_url("/space/a"),
+        json={"fileId": "fid-set"},
+    )
+    httpx_mock.add_response(
+        method="PUT",
+        url="https://provider.example/api/v3/oneprovider/data/fid-set/metadata/xattrs",
+        json={},
+    )
+
+    await files.set_file_xattrs("/space/a", {"license": "CC-0"})
+
+    put = next(
+        r
+        for r in httpx_mock.get_requests()
+        if r.method == "PUT"
+        and r.url.host == "provider.example"
+        and str(r.url).endswith("/metadata/xattrs")
+    )
+    assert put.headers["Content-Type"] == "application/json"
+    assert put.content == b'{"license": "CC-0"}'
+
+
+@pytest.mark.asyncio
+async def test_set_file_metadata_rejects_unknown_type(
+    monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
+) -> None:
+    _set_env(monkeypatch)
+    httpx_mock.add_response(
+        method="POST",
+        url=_lookup_url("/space/a"),
+        json={"fileId": "fid-set"},
+    )
+    with pytest.raises(ValueError, match="Unsupported metadata type"):
+        await files.set_file_metadata("/space/a", "custom", "{}")
+
+
+@pytest.mark.asyncio
+async def test_set_file_metadata_xattrs_rejects_non_string_values(
+    monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
+) -> None:
+    _set_env(monkeypatch)
+    httpx_mock.add_response(
+        method="POST",
+        url=_lookup_url("/space/a"),
+        json={"fileId": "fid-set"},
+    )
+    with pytest.raises(TypeError, match="xattrs values must be strings"):
+        await files.set_file_metadata("/space/a", "xattrs", {"n": 1})
+
+
+@pytest.mark.asyncio
+async def test_set_file_metadata_xattrs_rejects_top_level_array(
+    monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
+) -> None:
+    _set_env(monkeypatch)
+    httpx_mock.add_response(
+        method="POST",
+        url=_lookup_url("/space/a"),
+        json={"fileId": "fid-set"},
+    )
+    with pytest.raises(ValueError, match="JSON object"):
+        await files.set_file_metadata("/space/a", "xattrs", "[1,2]")
+
+
+@pytest.mark.asyncio
+async def test_set_file_metadata_rdf_rejects_dict_body(
+    monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
+) -> None:
+    _set_env(monkeypatch)
+    httpx_mock.add_response(
+        method="POST",
+        url=_lookup_url("/space/a"),
+        json={"fileId": "fid-set"},
+    )
+    with pytest.raises(TypeError, match="RDF metadata body"):
+        await files.set_file_metadata("/space/a", "rdf", {"a": 1})
 
 
 @pytest.mark.asyncio

@@ -37,6 +37,11 @@ async def test_list_user_harvesters_embeds_indices_without_schema(
     )
     httpx_mock.add_response(
         method="GET",
+        url="https://onezone.example/api/v3/onezone/harvesters/h1/spaces",
+        json={"spaces": ["spaceA", "spaceB"]},
+    )
+    httpx_mock.add_response(
+        method="GET",
         url="https://onezone.example/api/v3/onezone/harvesters/h1/indices/idx1",
         json={
             "indexId": "idx1",
@@ -57,6 +62,7 @@ async def test_list_user_harvesters_embeds_indices_without_schema(
             "guiPluginName": "study",
         }
     ]
+    assert result[0]["attached_spaces"] == ["spaceA", "spaceB"]
 
 
 @pytest.mark.asyncio

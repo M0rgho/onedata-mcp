@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 from fastmcp import FastMCP
 from mcp.types import ToolAnnotations
@@ -15,6 +15,7 @@ from onedata_mcp.api.files import (
     list_files,
     list_files_recursive,
     set_file_metadata,
+    set_file_xattrs,
 )
 
 
@@ -38,7 +39,7 @@ def register_module(mcp: FastMCP) -> None:
         attributes: Optional[list[str]] = Field(
             default=None,
             description="""
-            (Optional) List of attribute names to request from Oneprovider. 
+            (Optional) Additional attribute names to return for the file.
             Allowed values:
             - Identity/location: fileId, parentFileId, index, name, conflictingName, path, type
             - Permissions/access: activePermissionsType, posixPermissions, acl
@@ -65,7 +66,7 @@ def register_module(mcp: FastMCP) -> None:
         attributes: Optional[list[str]] = Field(
             default=None,
             description="""
-            (Optional) List of attribute names to request from Oneprovider. 
+            (Optional) Additional attribute names to return for each child.
             Use the same allowed values as in get_file_attributes.
             """,
         ),
@@ -100,7 +101,7 @@ def register_module(mcp: FastMCP) -> None:
         attributes: Optional[list[str]] = Field(
             default=None,
             description="""
-            (Optional) List of attribute names to request from Oneprovider. 
+            (Optional) Additional attribute names to return for each listed file.
             Use the same allowed values as in get_file_attributes.
             """,
         ),
@@ -170,7 +171,7 @@ def register_module(mcp: FastMCP) -> None:
         ),
         create_parents: bool = Field(
             default=False,
-            description="Create missing directories under the space root via Oneprovider path API",
+            description="Create missing parent directories along the path (under the space root)",
         ),
     ) -> str:
         """
@@ -197,7 +198,9 @@ def register_module(mcp: FastMCP) -> None:
             description="File id or path to the file in format /<space_name>/<path_to_file>"
         ),
         metadata_types: list[str] = Field(
-            description="List of metadata types to get",
+            description=(
+                "Which facets to fetch. Allowed names (multiple allowed): `json`, `rdf`, `xattrs`."
+            ),
             default=["json", "rdf", "xattrs"],
         ),
     ) -> dict[str, Any]:
@@ -209,19 +212,44 @@ def register_module(mcp: FastMCP) -> None:
         """
         return await get_file_metadata(file_id_or_path, metadata_types)
 
+    @mcp.tool(name="set_file_xattrs")
+    async def mcp_set_file_xattrs(
+        file_id_or_path: str = Field(
+            description="File id or path to the file in format /<space_name>/<path_to_file>"
+        ),
+        xattrs: dict[str, str] | str = Field(
+            description=(
+                "Extended attributes: keys map to string values only (omitted keys are left unchanged). "
+                "Use this rather than `set_file_metadata` for extended attributes. "
+                "You may send a JSON object string instead, e.g. "
+                '\'{"license": "CC-0"}\'. The payload must be a JSON object.'
+            ),
+        ),
+    ) -> None:
+        """
+        Merge file extended attributes without replacing JSON or RDF metadata.
+
+        Prefer this over combining metadata types inside a single setter.
+        """
+        return await set_file_xattrs(file_id_or_path, xattrs)
+
     @mcp.tool(name="set_file_metadata", annotations=ToolAnnotations(destructiveHint=True))
     async def mcp_set_file_metadata(
         file_id_or_path: str = Field(
             description="File id or path to the file in format /<space_name>/<path_to_file>"
         ),
-        metadata_type: str = Field(
-            description="Metadata type to set",
+        metadata_type: Literal["json", "rdf"] = Field(
+            description=('Overwrite one type: "json" or "rdf"'),
         ),
-        metadata: str = Field(
-            description="Metadata content to set",
+        metadata: str | dict[str, Any] | list[Any] = Field(
+            description=(
+                "Whole-document replacement for the type chosen above"
+                "`json`: object, array, or UTF-8 JSON matching that shape. "
+                "`rdf`: single RDF/XML string."
+            ),
         ),
     ) -> None:
         """
-        Set metadata for a given file id or path by metadata type.
+        Replace JSON or RDF file metadata
         """
         return await set_file_metadata(file_id_or_path, metadata_type, metadata)

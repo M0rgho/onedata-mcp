@@ -1,5 +1,6 @@
+import json
 from asyncio.log import logger
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping, Sequence
 from typing import Any
 from urllib.parse import quote
 
@@ -405,11 +406,72 @@ async def get_file_metadata(file_id_or_path: str, metadata_types: list[str]) -> 
     return result
 
 
+MetadataSetPayload = str | bytes | Mapping[str, Any] | Sequence[Any]
+
+
+def _xattrs_put_body(metadata: MetadataSetPayload) -> bytes:
+    """Build JSON body for ``PUT .../metadata/xattrs`` (string-valued object only)."""
+
+    raw: object
+    if isinstance(metadata, bytes):
+        raw = json.loads(metadata.decode("utf-8"))
+    elif isinstance(metadata, str):
+        raw = json.loads(metadata)
+    elif isinstance(metadata, Mapping):
+        raw = dict(metadata)
+    else:
+        msg = "xattrs metadata must be a JSON object (str, bytes, or dict), not a list"
+        raise TypeError(msg)
+    if not isinstance(raw, dict):
+        msg = "xattrs body must be a JSON object mapping attribute names to string values"
+        raise ValueError(msg)
+    out: dict[str, str] = {}
+    for key, val in raw.items():
+        if not isinstance(key, str):
+            msg = f"xattrs keys must be strings, not {type(key).__name__}"
+            raise TypeError(msg)
+        if not isinstance(val, str):
+            msg = (
+                f"xattrs values must be strings (Oneprovider schema); key {key!r} is "
+                f"{type(val).__name__}. Encode structured data as a JSON string value if needed."
+            )
+            raise TypeError(msg)
+        out[key] = val
+    return json.dumps(out).encode("utf-8")
+
+
+def _metadata_put_body(metadata_type: str, metadata: MetadataSetPayload) -> bytes:
+    if metadata_type == "xattrs":
+        return _xattrs_put_body(metadata)
+    if isinstance(metadata, bytes):
+        return metadata
+    if isinstance(metadata, str):
+        return metadata.encode("utf-8")
+    if metadata_type == "rdf":
+        msg = "RDF metadata body must be str or bytes"
+        raise TypeError(msg)
+    return json.dumps(metadata).encode("utf-8")
+
+
+async def set_file_xattrs(file_id_or_path: str, xattrs: MetadataSetPayload) -> None:
+    """Merge extended attributes (string values only).
+
+    Same as calling :func:`set_file_metadata` with ``metadata_type='xattrs'``.
+    Omitted keys are unchanged.
+    """
+    await set_file_metadata(file_id_or_path, "xattrs", xattrs)
+
+
 async def set_file_metadata(
-    file_id_or_path: str, metadata_type: str, metadata: str | bytes
+    file_id_or_path: str, metadata_type: str, metadata: MetadataSetPayload
 ) -> None:
     config = get_oneprovider_config()
     file_id = await _normalize_path_to_file_id(file_id_or_path)
+    allowed_types = {"json", "rdf", "xattrs"}
+    if metadata_type not in allowed_types:
+        supported = ", ".join(sorted(allowed_types))
+        msg = f"Unsupported metadata type: {metadata_type!r}. Supported types: {supported}"
+        raise ValueError(msg)
     additional_headers = (
         {"Content-Type": "application/rdf+xml"}
         if metadata_type == "rdf"
@@ -419,6 +481,6 @@ async def set_file_metadata(
         config,
         "PUT",
         f"/data/{file_id}/metadata/{metadata_type}",
-        body=metadata if isinstance(metadata, bytes) else metadata.encode("utf-8"),
+        body=_metadata_put_body(metadata_type, metadata),
         additional_headers=additional_headers,
     )
