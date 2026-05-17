@@ -207,7 +207,7 @@ async def get_file_attributes(
 
 
 async def _normalize_path_to_file_id(file_id_or_path: str) -> str:
-    """Resolve a logical path or opaque id through lookup-file-id (always via path form)."""
+    """Resolve a logical path or opaque id through lookup-file-id; return opaque file ids unchanged."""
 
     return await get_file_id(file_id_or_path)
 

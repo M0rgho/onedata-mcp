@@ -10,9 +10,6 @@ _PROVIDER_SPACE_FIELDS = (
     "spaceId",
     "name",
     "providers",
-    "dirId",
-    "trashDirId",
-    "archivesDirId",
 )
 
 

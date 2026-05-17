@@ -15,13 +15,23 @@ def register_module(mcp: FastMCP) -> None:
     """Register onedata harvesters module tools with the MCP server."""
 
     @mcp.tool(name="list_user_harvesters", annotations=ToolAnnotations(readOnlyHint=True))
-    async def mcp_list_user_harvesters() -> list[dict[str, Any]]:
+    async def mcp_list_user_harvesters(
+        space_name: str | None = Field(
+            default=None,
+            description=(
+                "Optional filter: return only harvesters attached to a space whose "
+                "name contains this substring (case-insensitive, provider-supported spaces)"
+            ),
+        ),
+    ) -> list[dict[str, Any]]:
         """
         List harvesters available to the current user.
 
-        Each harvester embeds detailed index metadata and attached spaces.
+        Each harvester embeds detailed index metadata and ``attached_spaces`` entries
+        (``space_id``, ``space_name``). When ``space_name`` is set, only harvesters linked
+        to a matching space are returned.
         """
-        return await list_user_harvesters()
+        return await list_user_harvesters(space_name=space_name)
 
     @mcp.tool(name="get_harvester_index_schema", annotations=ToolAnnotations(readOnlyHint=True))
     async def mcp_get_harvester_index_schema(

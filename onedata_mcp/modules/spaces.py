@@ -18,8 +18,8 @@ def register_module(mcp: FastMCP) -> None:
         """
         List available spaces this Oneprovider can serve.
 
-        Returns only spaces supported by the configured Oneprovider (not the full
-        zone-wide catalog). A space is a top-level shared data workspace for files.
+        Returns only spaces supported by the configured Oneprovider.
+        A space is a top-level shared data workspace for files.
         """
         return await list_available_spaces()
 

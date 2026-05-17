@@ -135,4 +135,8 @@ async def request(
         _format_body_for_log(response_body),
     )
 
-    return {"status_code": response.status_code, "body": response_body}
+    return {
+        "status_code": response.status_code,
+        "body": response_body,
+        "headers": dict(response.headers),
+    }
