@@ -12,8 +12,6 @@ from onedata_mcp.utils import OnedataInvalidSpaceError
 def _set_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("ONEDATA_ONEPROVIDER_HOST", "https://provider.example")
     monkeypatch.setenv("ONEDATA_ONEPROVIDER_TOKEN", "token")
-    monkeypatch.setenv("ONEDATA_ONEZONE_HOST", "https://onezone.example")
-    monkeypatch.setenv("ONEDATA_ONEZONE_TOKEN", "token")
     monkeypatch.setenv("ONEDATA_ALLOW_INSECURE_TLS", "false")
 
 
@@ -22,22 +20,13 @@ def _lookup_url(path: str) -> str:
 
 
 def _mock_available_spaces(httpx_mock: HTTPXMock, names: list[str]) -> None:
-    space_ids = [f"s{i}" for i in range(len(names))]
     httpx_mock.add_response(
         method="GET",
-        url="https://onezone.example/api/v3/onezone/spaces",
-        json={"spaces": space_ids},
+        url="https://provider.example/api/v3/oneprovider/spaces",
+        json=[{"name": name, "spaceId": f"s{i}"} for i, name in enumerate(names)],
         is_reusable=True,
         is_optional=True,
     )
-    for space_id, name in zip(space_ids, names, strict=True):
-        httpx_mock.add_response(
-            method="GET",
-            url=f"https://onezone.example/api/v3/onezone/spaces/{space_id}",
-            json={"name": name},
-            is_reusable=True,
-            is_optional=True,
-        )
 
 
 @pytest.fixture

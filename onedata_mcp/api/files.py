@@ -6,7 +6,7 @@ from urllib.parse import quote
 
 import httpx
 
-from onedata_mcp.api.spaces import list_user_spaces
+from onedata_mcp.api.spaces import list_available_spaces
 from onedata_mcp.config import get_oneprovider_config
 from onedata_mcp.utils import OnedataApiError, OnedataInvalidSpaceError, request
 
@@ -140,6 +140,16 @@ def _strip_deprecated_fields_in_list(
     return response_body
 
 
+async def _list_provider_space_names() -> list[str]:
+    try:
+        spaces = await list_available_spaces()
+        return sorted(
+            {name for name in (space.get("name") for space in spaces) if isinstance(name, str)}
+        )
+    except Exception:
+        return []
+
+
 async def _raise_invalid_space_error_if_needed(error: OnedataApiError, path: str) -> None:
     if error.error_id != "spaceNotSupportedBy":
         return
@@ -150,13 +160,7 @@ async def _raise_invalid_space_error_if_needed(error: OnedataApiError, path: str
     if not requested_space_name and path.startswith("/"):
         requested_space_name = path.split("/")[1]
 
-    try:
-        spaces = await list_user_spaces()
-        space_names = sorted(
-            {space["name"] for space in spaces if isinstance(space.get("name"), str)}
-        )
-    except Exception:
-        space_names = []
+    space_names = await _list_provider_space_names()
 
     requested_part = (
         f'Space "{requested_space_name}" does not exist.'
