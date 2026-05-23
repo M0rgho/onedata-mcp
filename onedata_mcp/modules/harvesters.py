@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Literal
 
 from fastmcp import FastMCP
 from mcp.types import ToolAnnotations
@@ -47,34 +47,50 @@ def register_module(mcp: FastMCP) -> None:
     async def mcp_query_harvester_index(
         harvester_id: str = Field(description="Harvester id"),
         index_id: str = Field(description="Harvester index id"),
-        query: dict[str, Any] | str = Field(
+        method: Literal["get", "post"] = Field(description="HTTP method (get or post)"),
+        path: str = Field(
             description=(
-                "Harvest query: **prefer a JSON object** "
-                '`{"method":"post","path":"_search","body":"{...}"}`. '
-                "If your client only allows a string, pass the **same object as one JSON string** "
-                "(it will be parsed). `body` must remain a JSON **string** for Elasticsearch "
-                "backends when present. Schema / field discovery — `path` `_search`, "
-                "`match_all` inside the `body` string, e.g. "
-                '{"method": "post", "path": "_search", '
-                '"body": "{\\"query\\":{\\"match_all\\":{}},\\"size\\":5}"}. '
-                "Index mapping JSON: "
-                '{"method": "get", "path": "_mapping"}. '
-                "Single document by id when supported: "
-                '{"method": "get", "path": "<resource_id>"}. '
-                "On `elasticsearch_harvesting_backend`, Onedata metadata is mostly under "
-                "`__onedata` (e.g. `__onedata.fileName`, `__onedata.fileName.keyword` for "
-                "exact terms); top-level `fileName` often matches nothing although the row "
-                "exists. If `_search` returns `hits.total.value` 0, adjust field paths "
-                "(or use `term` vs `match`) or inspect `_mapping` before concluding data "
-                "is absent; use `get_harvester_index_schema` or `_mapping` when unsure. "
-            )
+                "Backend-relative path forwarded to the harvester plugin. "
+                "For Elasticsearch: _mapping, _search, _count, or a document _id from a prior hit."
+            ),
+        ),
+        body: dict[str, Any] | None = Field(
+            default=None,
+            description=(
+                "JSON object for POST requests (Elasticsearch query DSL in body). "
+                "Not used when method is get."
+            ),
         ),
     ) -> dict[str, Any]:
         """
-        Execute a query against a specific harvester index.
+        Execute a harvester index request against the backing store (Elasticsearch-style).
 
-        Elasticsearch: `body` is serialized JSON (a string). Use `_mapping` /
-        `_search` as in `query`; zero-hit results often mean a wrong field path —
-        indexed file facets usually live under `__onedata`.
+        Onezone forwards ``method``, ``path``, and optional ``body`` to the plugin. Inspect
+        field names via ``get_harvester_index_schema`` first; file metadata often appears
+        under ``__onedata.*`` (e.g. ``fileName``, ``fileId``, ``path``).
+
+        Workflow: ``GET`` with ``path`` ``_mapping`` and no ``body``, then ``POST`` with
+        ``path`` ``_search`` and a query DSL dict in ``body``.
+
+        Omit ``body`` for GET; for POST the ES payload is passed as structured fields (dict),
+        not a serialized JSON string.
+
+        Examples (``method`` / ``path`` / ``body``):
+
+        - Mapping: ``get``, ``_mapping``, no body.
+        - Sample hit: ``post``, ``_search``, ``{"size": 1, "query": {"match_all": {}}}``.
+        - Term on filename: ``post``, ``_search``, ``term`` on ``__onedata.fileName``
+          (set ``size``).
+        - Harvested JSON field: ``post``, ``_search``, e.g.
+          ``{"query": {"term": {"enabled": true}}}``.
+        - OR query: ``post``, ``_search``, ``bool`` with ``should`` (``term``, ``range``, …).
+        - Trim payloads: include ``"_source": ["__onedata.fileName", "__onedata.fileId"]``
+          in the ``_search`` body.
+        - Count hits: ``post``, ``_count``, ``{"query": {"match_all": {}}}``.
+        - Doc by ES id: ``get``, literal document id path, no body
+          (id from a prior ``_search`` hit).
+
+        From ``_search`` hits, resolve files on Oneprovider via ``__onedata.path`` or file id
+        through ``get_file_id`` / ``get_file_attributes``.
         """
-        return await query_harvester_index(harvester_id, index_id, query)
+        return await query_harvester_index(harvester_id, index_id, method, path, body)

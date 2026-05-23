@@ -1,36 +1,27 @@
 import asyncio
 import json
-from typing import Any
+from typing import Any, Literal
 
 from onedata_mcp.api.spaces import list_available_spaces
 from onedata_mcp.config import get_onezone_config
 from onedata_mcp.utils import request
 
 
-def coerce_harvesters_index_query(query: dict[str, Any] | str) -> dict[str, Any]:
-    """
-    Tool calls often pass the whole harvester query as a JSON string.
-    Onezone expects a JSON object (``method``, ``path``, optional ``body`` string, …).
-    """
+def build_onezone_harvester_query(
+    method: str,
+    path: str,
+    body: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Build Onezone ``HarvesterQuery`` JSON (``body`` serialized as a string)."""
+    payload: dict[str, Any] = {"method": method.lower(), "path": path}
+    if body is not None:
+        payload["body"] = json.dumps(body, separators=(",", ":"))
+    return payload
 
-    if isinstance(query, dict):
-        return query
-    if isinstance(query, str):
-        stripped = query.strip()
-        if not stripped:
-            msg = "harvester query string is empty"
-            raise ValueError(msg)
-        try:
-            parsed: Any = json.loads(stripped)
-        except json.JSONDecodeError as e:
-            msg = f"harvester query is not valid JSON: {e}"
-            raise ValueError(msg) from e
-        if not isinstance(parsed, dict):
-            msg = "harvester query JSON must deserialize to an object"
-            raise TypeError(msg)
-        return parsed
-    msg = f"harvester query must be dict or str, got {type(query).__name__}"
-    raise TypeError(msg)
+
+def harvester_es_search_query(es_body: dict[str, Any]) -> dict[str, Any]:
+    """Elasticsearch ``_search`` request body for ``query_harvester_index`` (``POST``)."""
+    return es_body
 
 
 async def get_user_harvester(harvester_id: str) -> dict[str, Any]:
@@ -153,15 +144,39 @@ async def get_harvester_index_schema(harvester_id: str, index_id: str) -> dict[s
     return await get_harvester_index(harvester_id, index_id)
 
 
+def unwrap_harvester_query_response(payload: Any) -> Any:
+    """Parse Onezone ``HarvesterQueryResponse`` (ES JSON in ``body`` string) to a dict."""
+    if not isinstance(payload, dict):
+        return payload
+    if "hits" in payload:
+        return payload
+    inner = payload.get("body")
+    if isinstance(inner, str):
+        try:
+            parsed: Any = json.loads(inner)
+        except json.JSONDecodeError:
+            return payload
+        return parsed if isinstance(parsed, dict) else payload
+    if isinstance(inner, dict):
+        return inner
+    return payload
+
+
 async def query_harvester_index(
-    harvester_id: str, index_id: str, query: dict[str, Any] | str
+    harvester_id: str,
+    index_id: str,
+    method: Literal["get", "post"] | str,
+    path: str,
+    body: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     config = get_onezone_config()
-    body = coerce_harvesters_index_query(query)
+    onezone_query = build_onezone_harvester_query(method, path, body)
     response = await request(
         config,
         "POST",
         f"/harvesters/{harvester_id}/indices/{index_id}/query",
-        json_body=body,
+        json_body=onezone_query,
     )
-    return response["body"]
+    raw = response["body"]
+    unwrapped = unwrap_harvester_query_response(raw)
+    return unwrapped if isinstance(unwrapped, dict) else raw
