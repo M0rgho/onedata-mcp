@@ -326,7 +326,7 @@ async def grep_file_content(
     return "\n".join(line for line in content_str.splitlines() if pattern in line)
 
 
-async def create_file(path: str, content: str, *, create_parents: bool = False) -> str:
+async def _create_file_with_body(path: str, body: bytes, *, create_parents: bool = False) -> str:
     config = get_oneprovider_config()
     normalized = path.strip("/")
 
@@ -346,7 +346,7 @@ async def create_file(path: str, content: str, *, create_parents: bool = False) 
                 "PUT",
                 f"/data/{root_id}/path/{encoded_path}",
                 params={"create_parents": True},
-                body=content.encode("utf-8"),
+                body=body,
                 additional_headers={"Content-Type": "application/octet-stream"},
             )
         except OnedataApiError as e:
@@ -366,7 +366,7 @@ async def create_file(path: str, content: str, *, create_parents: bool = False) 
             "POST",
             f"/data/{parent_id}/children",
             params={"name": file_name, "type": "REG"},
-            body=content.encode("utf-8"),
+            body=body,
             additional_headers={"Content-Type": "application/octet-stream"},
         )
         return response["body"]["fileId"]
@@ -376,6 +376,20 @@ async def create_file(path: str, content: str, *, create_parents: bool = False) 
 
         logger.error(f"Error creating file {path}: {e}")
         raise e
+
+
+async def create_file(path: str, content: str, *, create_parents: bool = False) -> str:
+    """Create a file from UTF-8 text (MCP ``create_file`` and typical callers)."""
+
+    return await _create_file_with_body(
+        path, content.encode("utf-8"), create_parents=create_parents
+    )
+
+
+async def create_file_bytes(path: str, content: bytes, *, create_parents: bool = False) -> str:
+    """Create a file from raw bytes (tests / direct API only — not exposed on MCP tools)."""
+
+    return await _create_file_with_body(path, content, create_parents=create_parents)
 
 
 async def delete_file(file_id_or_path: str) -> None:

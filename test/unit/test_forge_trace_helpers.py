@@ -78,6 +78,106 @@ def test_patch_forge_trace_test_result_rewrite(tmp_path: Path) -> None:
     assert data.get("test_result") == "failure"
 
 
+def test_flush_forge_trace_summary_csv_one_file_per_test_directory(tmp_path: Path) -> None:
+    import csv
+
+    from forge_logging import (
+        flush_forge_trace_summary_csvs,
+        register_forge_trace_for_summary,
+    )
+
+    run_dir = tmp_path / "logs_run"
+    run_dir.mkdir()
+    t1 = run_dir / "forge_trace_one_1.json"
+    t2 = run_dir / "forge_trace_two_2.json"
+    minimal: dict = {
+        "schema_version": "plgrid-forge-e2e-trace/1",
+        "scenario": {
+            "name": "scenario-a",
+            "tool_context_mode": "full",
+            "temperature": 0.0,
+            "max_tokens_cap": 100,
+            "max_tool_rounds_cap": 3,
+        },
+        "effective_model_id": "m1",
+        "forge_base_url_host_only": "https://example.invalid",
+        "mcp_tools_context_stats": {
+            "tool_count": 2,
+            "tool_names": ["a", "b"],
+            "tools_definitions_json_utf8_bytes": 10,
+            "tools_definitions_json_char_len": 10,
+            "tools_definitions_approx_tokens_heuristic": 3,
+        },
+        "completion_rounds": [
+            {"response": {"usage": {"used_plgrid_credits": 0.5}}},
+        ],
+        "final_finish_reason": "stop",
+        "metrics_echo": {
+            "tools_in_context_count": 2,
+            "tool_calls_by_model": 1,
+            "tool_calls_total": 1,
+            "tool_calls_successful": 1,
+            "estimated_prompt_peak_utf8_bytes": 999,
+            "forge_usage_totals": {"prompt_tokens": 1, "completion_tokens": 2, "total_tokens": 3},
+        },
+        "test_result": "success",
+        "pytest_nodeid": "test/e2e/foo.py::test_one",
+    }
+    t1.write_text(json.dumps(minimal, indent=2), encoding="utf-8")
+    minimal_b = json.loads(json.dumps(minimal))
+    minimal_b["scenario"]["name"] = "scenario-b"
+    minimal_b["test_result"] = "failure"
+    minimal_b["pytest_nodeid"] = "test/unit/api/bar.py::test_two"
+    t2.write_text(json.dumps(minimal_b, indent=2), encoding="utf-8")
+
+    register_forge_trace_for_summary(t1, "test/e2e/foo.py::test_one")
+    register_forge_trace_for_summary(t2, "test/unit/api/bar.py::test_two")
+    flush_forge_trace_summary_csvs()
+
+    csv_e2e = run_dir / "forge_traces_summary__test__e2e.csv"
+    csv_unit = run_dir / "forge_traces_summary__test__unit__api.csv"
+    assert csv_e2e.is_file()
+    assert csv_unit.is_file()
+
+    with csv_e2e.open(encoding="utf-8") as fh:
+        rows = list(csv.DictReader(fh))
+    assert len(rows) == 1
+    assert rows[0]["scenario_name"] == "scenario-a"
+    assert rows[0]["test_passed"] == "True"
+    assert rows[0]["pytest_test_directory"] == "test/e2e"
+    assert rows[0]["trace_json_path"] == str(t1.resolve())
+    assert rows[0]["used_plgrid_credits_sum"] == "0.5"
+
+    with csv_unit.open(encoding="utf-8") as fh:
+        rows_u = list(csv.DictReader(fh))
+    assert len(rows_u) == 1
+    assert rows_u[0]["scenario_name"] == "scenario-b"
+    assert rows_u[0]["test_passed"] == "False"
+    assert rows_u[0]["pytest_test_directory"] == "test/unit/api"
+
+
+def test_write_forge_trace_summary_csvs_for_run_dir_scans_glob(tmp_path: Path) -> None:
+    from forge_logging import write_forge_trace_summary_csvs_for_run_dir
+
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    (run_dir / "forge_trace_a.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "plgrid-forge-e2e-trace/1",
+                "scenario": {"name": "n"},
+                "mcp_tools_context_stats": {},
+                "completion_rounds": [],
+                "metrics_echo": {"forge_usage_totals": {}},
+            }
+        ),
+        encoding="utf-8",
+    )
+    write_forge_trace_summary_csvs_for_run_dir(run_dir)
+    csv_unknown = run_dir / "forge_traces_summary___unknown.csv"
+    assert csv_unknown.is_file()
+
+
 def test_run_metrics_tool_calls_echo_counts() -> None:
     m = RunMetrics(
         tools_in_context_count=1,

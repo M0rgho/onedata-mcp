@@ -7,17 +7,22 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+import pytest_asyncio
 from dotenv import load_dotenv
 
-_REPO_ROOT = Path(__file__).resolve().parents[2]
+_REPO_ROOT = Path(__file__).resolve().parents[1]
 # So skipif + fixtures see the same vars as runtime (pytest does not load .env by itself).
 load_dotenv(_REPO_ROOT / ".env")
 
-_PLGRID_DIR = Path(__file__).resolve().parent
-if str(_PLGRID_DIR) not in sys.path:
-    sys.path.insert(0, str(_PLGRID_DIR))
+_SUPPORT_DIR = Path(__file__).resolve().parent / "support"
+if str(_SUPPORT_DIR) not in sys.path:
+    sys.path.insert(0, str(_SUPPORT_DIR))
 
-from forge_logging import patch_forge_trace_test_result  # noqa: E402
+from forge_logging import (  # noqa: E402
+    flush_forge_trace_summary_csvs,
+    patch_forge_trace_test_result,
+)
+from env_checks import onedata_credentials_available  # noqa: E402
 from forge_pytest_integration import LAST_FORGE_RUN  # noqa: E402
 
 
@@ -32,6 +37,24 @@ def pytest_configure(config: pytest.Config) -> None:  # noqa: ARG001
     for name in ("httpx", "httpcore"):
         logging.getLogger(name).setLevel(logging.WARNING)
     logging.getLogger("fastmcp.server.server").addFilter(_SuppressFastMCPValidationExceptionLogs())
+
+
+def _e2e_delete_spaces_after_test() -> bool:
+    return os.getenv("ONEDATA_E2E_DELETE_SPACE", "").strip().lower() in {"1", "true", "yes"}
+
+
+def pytest_sessionfinish(session, exitstatus):  # noqa: ARG001
+    flush_forge_trace_summary_csvs()
+    if _e2e_delete_spaces_after_test():
+        import asyncio
+
+        from e2e_isolated_space import delete_user_space, session_created_space_ids
+
+        async def _cleanup() -> None:
+            for space_id in session_created_space_ids():
+                await delete_user_space(space_id)
+
+        asyncio.run(_cleanup())
 
 
 @pytest.hookimpl(wrapper=True)
@@ -75,3 +98,65 @@ def mcp_application() -> Any:
     from onedata_mcp.main import mcp
 
     return mcp
+
+
+@pytest.fixture
+def onedata_admin_token() -> str:
+    """Admin Oneprovider token (not the confined MCP token applied by ``isolated_e2e_space``)."""
+    from e2e_isolated_space import e2e_admin_oneprovider_token
+
+    if not onedata_credentials_available():
+        pytest.skip("Full Onedata credentials required for isolated E2E spaces")
+    try:
+        return e2e_admin_oneprovider_token()
+    except ValueError:
+        pytest.skip(
+            "ONEDATA_E2E_ADMIN_TOKEN or ONEDATA_ONEPROVIDER_TOKEN required for isolated E2E"
+        )
+
+
+@pytest_asyncio.fixture
+async def isolated_e2e_space(request: pytest.FixtureRequest, onedata_admin_token: str):
+    """Per-test space (or shared group) with tree reset and confined Oneprovider token."""
+    from e2e_isolated_space import (
+        IsolatedE2ESpace,
+        delete_user_space,
+        ensure_isolated_space_harvester,
+        isolated_scope_needs_harvester,
+        provision_isolated_space,
+        reset_space_contents,
+    )
+
+    if not onedata_credentials_available():
+        pytest.skip("Full Onedata credentials required for isolated E2E spaces")
+
+    group_marker = request.node.get_closest_marker("e2e_isolated_space_group")
+    scope = str(group_marker.args[0]) if group_marker and group_marker.args else "function"
+    confined_write = request.node.get_closest_marker("e2e_isolated_confined_write") is not None
+    space = await provision_isolated_space(scope=scope, confined_write=confined_write)
+
+    assert isinstance(space, IsolatedE2ESpace)
+    if isolated_scope_needs_harvester(scope):
+        await ensure_isolated_space_harvester(space)
+    await reset_space_contents(space, admin_token=onedata_admin_token)
+
+    previous_provider = os.environ.get("ONEDATA_ONEPROVIDER_TOKEN")
+    os.environ["ONEDATA_ONEPROVIDER_TOKEN"] = space.confined_token_for_mcp(write=confined_write)
+
+    yield space
+
+    await reset_space_contents(space, admin_token=onedata_admin_token)
+    if _e2e_delete_spaces_after_test() and not space.reused:
+        await delete_user_space(space.space_id)
+
+    if previous_provider is None:
+        os.environ.pop("ONEDATA_ONEPROVIDER_TOKEN", None)
+    else:
+        os.environ["ONEDATA_ONEPROVIDER_TOKEN"] = previous_provider
+
+
+@pytest_asyncio.fixture
+async def mcp_application_isolated(isolated_e2e_space, mcp_application: Any) -> Any:
+    """MCP app while ONEDATA_ONEPROVIDER_TOKEN is the confined token (read-only by default)."""
+    _ = isolated_e2e_space
+    return mcp_application

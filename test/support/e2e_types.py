@@ -22,6 +22,7 @@ class E2EScenario:
     max_tokens: int = 2048
     max_tool_rounds: int = 8
     require_no_extra_tool_calls: bool = False
+    forbidden_tools: frozenset[str] = frozenset()
 
     def __post_init__(self) -> None:
         if not self.required_tools.issubset(self.allowed_tools_for_minimal_context):
@@ -34,6 +35,7 @@ class ToolCallMetric:
     duration_ms: float
     ok: bool
     error: str | None = None
+    arguments: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -45,6 +47,7 @@ class RunMetrics:
     required_tools_satisfied: bool = False
     missing_required_tools: frozenset[str] = frozenset()
     unnecessary_tools_called: frozenset[str] = frozenset()
+    forbidden_tools_called: frozenset[str] = frozenset()
     forge_loop_wall_time_ms: float = 0.0
     mcp_tools_context_stats: dict[str, Any] = field(default_factory=dict)
     chat_context_peak_stats: dict[str, Any] = field(default_factory=dict)
@@ -52,13 +55,20 @@ class RunMetrics:
     forge_token_usage_rounds: list[dict[str, Any]] = field(default_factory=list)
     estimated_prompt_footprint_utf8_peak_bytes: int = 0
 
-    def recompute_tool_sets(self, required: frozenset[str]) -> None:
+    def recompute_tool_sets(
+        self,
+        required: frozenset[str],
+        *,
+        forbidden: frozenset[str] | None = None,
+    ) -> None:
         names = [c.tool_name for c in self.tool_calls]
         self.tool_call_count = len(names)
         self.unique_tools_called = frozenset(names)
         self.missing_required_tools = required - self.unique_tools_called
         self.required_tools_satisfied = self.missing_required_tools == frozenset()
         self.unnecessary_tools_called = self.unique_tools_called - required
+        blocked = forbidden or frozenset()
+        self.forbidden_tools_called = self.unique_tools_called & blocked
 
     @property
     def all_tool_calls_ok(self) -> bool:

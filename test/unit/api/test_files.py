@@ -19,6 +19,10 @@ def _lookup_url(path: str) -> str:
     return f"https://provider.example/api/v3/oneprovider/lookup-file-id/{quote(path, safe='')}"
 
 
+# Matches onedata_mcp.api.files._looks_like_file_id (180-char opaque id).
+_OPAQUE_FILE_ID = "0" * 180
+
+
 def _mock_available_spaces(httpx_mock: HTTPXMock, names: list[str]) -> None:
     httpx_mock.add_response(
         method="GET",
@@ -76,16 +80,18 @@ async def test_delete_file_accepts_opaque_file_id_without_lookup(
     monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
 ) -> None:
     _set_env(monkeypatch)
-    file_id = "0000000000587328677569642373706163655Fexample"
     httpx_mock.add_response(
         method="DELETE",
-        url=f"https://provider.example/api/v3/oneprovider/data/{file_id}",
+        url=f"https://provider.example/api/v3/oneprovider/data/{_OPAQUE_FILE_ID}",
         status_code=204,
     )
 
-    await files.delete_file(file_id)
+    await files.delete_file(_OPAQUE_FILE_ID)
 
-    assert len(httpx_mock.get_requests()) == 1
+    requests = httpx_mock.get_requests()
+    assert len(requests) == 1
+    assert requests[0].method == "DELETE"
+    assert "lookup-file-id" not in str(requests[0].url)
 
 
 @pytest.mark.asyncio
@@ -686,6 +692,32 @@ async def test_create_file_posts_child_when_create_parents_false(
         if r.method == "POST" and r.url.host == "provider.example" and "/children" in r.url.path
     )
     assert post.url.params["name"] == "note.txt"
+    assert post.content == b"hello"
+
+
+@pytest.mark.asyncio
+async def test_create_file_bytes_uploads_body_unchanged(
+    monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
+) -> None:
+    _set_env(monkeypatch)
+    payload = bytes(range(256))
+    httpx_mock.add_response(
+        method="POST",
+        url=_lookup_url("/space/parent"),
+        json={"fileId": "parent-id"},
+    )
+    httpx_mock.add_response(
+        method="POST",
+        url=re.compile(r"https://provider\.example/api/v3/oneprovider/data/parent-id/children\?.*"),
+        json={"fileId": "bin-fid"},
+    )
+
+    await files.create_file_bytes("/space/parent/blob.bin", payload)
+
+    post = next(
+        r for r in httpx_mock.get_requests() if r.method == "POST" and "/children" in r.url.path
+    )
+    assert post.content == payload
 
 
 @pytest.mark.asyncio

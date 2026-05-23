@@ -2,6 +2,7 @@ import pytest
 from pytest_httpx import HTTPXMock
 
 from onedata_mcp.api import spaces
+from onedata_mcp.utils import OnedataApiError
 
 
 def _set_oneprovider_env(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -177,9 +178,10 @@ async def test_list_space_datasets_passes_pagination_token(
 
 
 @pytest.mark.asyncio
-async def test_list_space_datasets_falls_back_to_data_access_on_data_path_caveat(
+async def test_list_space_datasets_raises_when_catalog_unauthorized_under_data_path_caveat(
     monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
 ) -> None:
+    """Confined ``data.path`` tokens cannot use ``GET /spaces/{{sid}}/datasets`` (no fallback)."""
     _set_oneprovider_env(monkeypatch)
     httpx_mock.add_response(
         method="GET",
@@ -206,41 +208,14 @@ async def test_list_space_datasets_falls_back_to_data_access_on_data_path_caveat
             }
         },
     )
-    httpx_mock.add_response(
-        method="POST",
-        url="https://provider.example/api/v3/oneprovider/lookup-file-id/%2Fmy-space",
-        json={"fileId": "root-dir-id"},
-    )
-    httpx_mock.add_response(
-        method="GET",
-        url="https://provider.example/api/v3/oneprovider/data/root-dir-id/children",
-        json={
-            "children": [
-                {"fileId": "dataset-dir-id", "name": "e2e-dataset-root", "type": "DIR"},
-            ]
-        },
-    )
-    httpx_mock.add_response(
-        method="GET",
-        url="https://provider.example/api/v3/oneprovider/data/dataset-dir-id/dataset/summary",
-        json={"directDataset": "d1", "effectiveAncestorDatasets": []},
-    )
-    httpx_mock.add_response(
-        method="GET",
-        url="https://provider.example/api/v3/oneprovider/datasets/d1",
-        json={
-            "state": "attached",
-            "datasetId": "d1",
-            "rootFilePath": "/my-space/e2e-dataset-root",
-            "rootFileType": "DIR",
-        },
-    )
 
-    result = await spaces.list_space_datasets("my-space", state="attached")
+    with pytest.raises(OnedataApiError, match="status=401"):
+        await spaces.list_space_datasets("my-space", state="attached")
 
-    assert result["datasets"][0]["datasetId"] == "d1"
-    assert result["datasets"][0]["name"] == "e2e-dataset-root"
-    assert result["datasets"][0]["rootFilePath"] == "/my-space/e2e-dataset-root"
+    urls = [str(request.url) for request in httpx_mock.get_requests()]
+    assert any("/spaces/sp1/datasets" in url for url in urls)
+    assert not any("lookup-file-id" in url for url in urls)
+    assert not any("/data/" in url for url in urls)
 
 
 @pytest.mark.asyncio

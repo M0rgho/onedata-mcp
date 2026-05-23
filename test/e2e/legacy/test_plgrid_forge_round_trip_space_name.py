@@ -13,6 +13,7 @@ from forge_harness import run_forge_scenario
 
 pytestmark = [
     pytest.mark.asyncio,
+    pytest.mark.legacy,
     pytest.mark.e2e,
     pytest.mark.onedata_integration,
     pytest.mark.skipif(

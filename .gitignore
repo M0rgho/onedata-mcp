@@ -38,9 +38,10 @@ pip-delete-this-directory.txt
 
 # PLGrid Forge E2E traces (default PLGRID_E2E_TRACE_DIR=logs/)
 logs/
+legacy_logs/
 
 # E2E isolated-space token cache (macaroons)
-test/plgrid/.e2e-token-cache/
+test/support/.e2e-token-cache/
 
 # Unit test / coverage reports
 htmlcov/

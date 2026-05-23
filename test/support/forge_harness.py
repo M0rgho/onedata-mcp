@@ -17,6 +17,7 @@ from fastmcp.exceptions import ToolError
 from forge_logging import (
     chat_messages_stats,
     mcp_tools_context_stats,
+    register_forge_trace_for_summary,
     serialize_openai_completion,
     trace_output_path,
     trace_uses_explicit_file,
@@ -76,6 +77,8 @@ async def run_forge_scenario(
     forge_base_url: str,
     model: str,
     pytest_request: Any = None,
+    isolated_space_id: str | None = None,
+    isolated_space_name: str | None = None,
 ) -> ForgeRunResult:
     if tool_context_mode == "minimal":
         openai_tools = await build_openai_tools_filtered(
@@ -195,7 +198,13 @@ async def run_forge_scenario(
             duration_ms = (time.perf_counter() - tc_t0) * 1000.0
 
             metrics.tool_calls.append(
-                ToolCallMetric(tool_name=name, duration_ms=duration_ms, ok=ok, error=err)
+                ToolCallMetric(
+                    tool_name=name,
+                    duration_ms=duration_ms,
+                    ok=ok,
+                    error=err,
+                    arguments=arguments,
+                )
             )
             messages.append(
                 {
@@ -216,9 +225,13 @@ async def run_forge_scenario(
     metrics.estimated_prompt_footprint_utf8_peak_bytes = peak_combined_est
 
     metrics.forge_loop_wall_time_ms = (time.perf_counter() - loop_t0) * 1000.0
-    metrics.recompute_tool_sets(scenario.required_tools)
+    metrics.recompute_tool_sets(
+        scenario.required_tools,
+        forbidden=scenario.forbidden_tools,
+    )
 
     peak_footprint = metrics.estimated_prompt_footprint_utf8_peak_bytes
+    mcp_tool_wall_ms_sum = sum(tc.duration_ms for tc in metrics.tool_calls)
     envelope: dict[str, Any] = {
         "schema_version": "plgrid-forge-e2e-trace/1",
         "scenario": {
@@ -229,9 +242,12 @@ async def run_forge_scenario(
             "max_tokens_cap": scenario.max_tokens,
             "max_tool_rounds_cap": scenario.max_tool_rounds,
             "required_tools_sorted": sorted(scenario.required_tools),
+            "forbidden_tools_sorted": sorted(scenario.forbidden_tools),
             "allowed_tools_minimal_sorted": sorted(scenario.allowed_tools_for_minimal_context),
             "user_prompt": scenario.user_prompt,
         },
+        "isolated_space_id": isolated_space_id,
+        "isolated_space_name": isolated_space_name,
         "forge_base_url_host_only": forge_base_url,
         "effective_model_id": model_name,
         "mcp_tools_definitions_once": openai_tools,
@@ -245,11 +261,30 @@ async def run_forge_scenario(
             **metrics.tool_calls_echo_counts(),
             "estimated_prompt_peak_utf8_bytes": peak_footprint,
             "forge_usage_totals": metrics.forge_token_usage_totals,
+            "forge_loop_wall_time_ms": metrics.forge_loop_wall_time_ms,
+            "mcp_tool_calls_wall_time_ms_sum": mcp_tool_wall_ms_sum,
+            "forbidden_tools_called_sorted": sorted(metrics.forbidden_tools_called),
         },
+        "tool_calls_detail": [
+            {
+                "tool_name": c.tool_name,
+                "ok": c.ok,
+                "duration_ms": c.duration_ms,
+                "arguments": c.arguments,
+                "error": c.error,
+            }
+            for c in metrics.tool_calls
+        ],
         "test_result": None,
+        "pytest_nodeid": pytest_request.node.nodeid if pytest_request is not None else None,
     }
     append = trace_uses_explicit_file()
     write_forge_trace(trace_path_obj, envelope, append=append)
+    if not append:
+        register_forge_trace_for_summary(
+            trace_path_obj,
+            pytest_request.node.nodeid if pytest_request is not None else None,
+        )
 
     result_obj = ForgeRunResult(
         scenario=scenario,

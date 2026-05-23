@@ -1,4 +1,4 @@
-"""Shared stub payloads for simulated list_user_spaces tool calls."""
+"""Shared stub payloads for simulated list_available_spaces tool calls."""
 
 from __future__ import annotations
 
@@ -20,5 +20,5 @@ SIMULATED_USER_SPACES: list[dict[str, Any]] = [
 SIMULATED_SPACE_NAMES = [entry["name"] for entry in SIMULATED_USER_SPACES]
 
 
-def simulate_list_user_spaces(_args: dict[str, Any]) -> list[dict[str, Any]]:
+def simulate_list_available_spaces(_args: dict[str, Any]) -> list[dict[str, Any]]:
     return SIMULATED_USER_SPACES

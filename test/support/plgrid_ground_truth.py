@@ -15,7 +15,7 @@ async def mcp_tool_json_result(app: FastMCP, name: str, arguments: dict[str, Any
 
 
 async def ground_truth_user_space_names(app: FastMCP) -> list[str]:
-    data = await mcp_tool_json_result(app, "list_user_spaces", {})
+    data = await mcp_tool_json_result(app, "list_available_spaces", {})
     if not isinstance(data, list):
         return []
     names: list[str] = []
