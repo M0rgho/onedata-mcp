@@ -39,6 +39,9 @@ pip-delete-this-directory.txt
 # PLGrid Forge E2E traces (default PLGRID_E2E_TRACE_DIR=logs/)
 logs/
 
+# E2E isolated-space token cache (macaroons)
+test/plgrid/.e2e-token-cache/
+
 # Unit test / coverage reports
 htmlcov/
 .tox/
@@ -217,3 +220,8 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+europeana_raw_data/
+thesis_figures
+swagger
+.vscode
