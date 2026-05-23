@@ -19,6 +19,7 @@ build-backend = "hatchling.build"
 
 [dependency-groups]
 dev = [
+    "matplotlib>=3.10.9",
     "mcp[cli]>=1.27.0",
     "openai>=1.88.0",
     "pytest>=8.4.2",
@@ -44,7 +45,7 @@ reportUnusedFunction = "none"
 
 [tool.pytest.ini_options]
 # Single-process only: avoid pytest-xdist multi-worker runs even if installed globally / in tooling.
-addopts = [ "-p", "no:xdist" ]
+addopts = [ "-p", "no:xdist", "-m", "not legacy" ]
 asyncio_mode = "strict"
 asyncio_default_test_loop_scope = "function"
 asyncio_default_fixture_loop_scope = "function"
@@ -52,4 +53,9 @@ testpaths = [ "test" ]
 markers = [
     "e2e: End-to-end PLGrid Forge LLM + MCP tests (requires PLGRID_FORGE_* env; some need Onedata)",
     "onedata_integration: requires live Onezone / Oneprovider",
+    "e2e_isolated_space_group(name): reuse one isolated space for tests in the same group; contents reset per test",
+    "e2e_isolated: isolated-space E2E (dedicated space + confined Oneprovider token per test)",
+    "e2e_isolated_confined_write: use read-write confined token for MCP (default is data.readonly)",
+    'e2e_scenario(id): isolated scenario id from docs/onedata-mcp-e2e-test-scenarios.md (e.g. "list-spaces")',
+    "legacy: shared-space Forge E2E under test/e2e/legacy (excluded from default pytest)",
 ]
