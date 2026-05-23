@@ -27,20 +27,31 @@ Configuration is loaded from the process environment. [python-dotenv](https://py
 
 ### Onedata API (required for live calls)
 
-| Variable | Description |
-| -------- | ----------- |
-| `ONEDATA_ONEZONE_HOST` | Onezone base URL, e.g. `https://your-onezone.example` (no `/api/...` suffix). |
-| `ONEDATA_ONEZONE_TOKEN` | Token sent as `X-Auth-Token` to Onezone. |
-| `ONEDATA_ONEPROVIDER_HOST` | Oneprovider base URL, e.g. `https://your-oneprovider.example`. |
-| `ONEDATA_ONEPROVIDER_TOKEN` | Token sent as `X-Auth-Token` to Oneprovider. |
+
+| Variable                     | Description                                                                                                             |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `ONEDATA_ONEZONE_HOST`       | Onezone base URL, e.g. `https://your-onezone.example` (no `/api/...` suffix).                                           |
+| `ONEDATA_ONEZONE_TOKEN`      | Token sent as `X-Auth-Token` to Onezone.                                                                                |
+| `ONEDATA_ONEPROVIDER_HOST`   | Oneprovider base URL, e.g. `https://your-oneprovider.example`.                                                          |
+| `ONEDATA_ONEPROVIDER_TOKEN`  | Token sent as `X-Auth-Token` to Oneprovider.                                                                            |
 | `ONEDATA_ALLOW_INSECURE_TLS` | Set to `true` only if you must use HTTPS with self-signed or otherwise unverifiable certificates (default: verify TLS). |
+
+### Token caveats
+
+Tokens may carry **caveats** (fine-grained restrictions). On startup the server checks `ONEDATA_ONEPROVIDER_TOKEN` for **`data.readonly`**; when that caveat is present, write tools MCP are omitted: 
+  - `create_file`
+  - `delete_file`
+  - `set_file_xattrs`
+  - `set_file_metadata`
 
 ### Server / logging (optional)
 
-| Variable | Description |
-| -------- | ----------- |
-| `FASTMCP_LOG_LEVEL` | Logging level (default: `INFO`). |
-| `FASTMCP_LOG_FILE` | If set, logs are also appended to this file path. |
+
+| Variable            | Description                                       |
+| ------------------- | ------------------------------------------------- |
+| `FASTMCP_LOG_LEVEL` | Logging level (default: `INFO`).                  |
+| `FASTMCP_LOG_FILE`  | If set, logs are also appended to this file path. |
+
 
 ## Run the MCP server (stdio)
 
