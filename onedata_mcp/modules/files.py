@@ -19,8 +19,15 @@ from onedata_mcp.api.files import (
 )
 
 
-def register_module(mcp: FastMCP) -> None:
+def register_module(mcp: FastMCP, *, register_writers: bool = True) -> None:
     """Register onedata files module tools and prompts with the MCP server."""
+
+    _register_read_tools(mcp)
+    if register_writers:
+        _register_write_tools(mcp)
+
+
+def _register_read_tools(mcp: FastMCP) -> None:
 
     @mcp.tool(name="get_file_id", annotations=ToolAnnotations(readOnlyHint=True))
     async def mcp_get_file_id(
@@ -163,6 +170,28 @@ def register_module(mcp: FastMCP) -> None:
         """
         return await grep_file_content(file_id_or_path, pattern)
 
+    @mcp.tool(name="get_file_metadata", annotations=ToolAnnotations(readOnlyHint=True))
+    async def mcp_get_file_metadata(
+        file_id_or_path: str = Field(
+            description="File id or path to the file in format /<space_name>/<path_to_file>"
+        ),
+        metadata_types: list[str] = Field(
+            description=(
+                "Which facets to fetch. Allowed names (multiple allowed): `json`, `rdf`, `xattrs`."
+            ),
+            default=["json", "rdf", "xattrs"],
+        ),
+    ) -> dict[str, Any]:
+        """
+        Get metadata for a given file id or path by metadata types.
+
+        For many metadata values from a single request, use
+        get_file_attributes with metadata-related attributes.
+        """
+        return await get_file_metadata(file_id_or_path, metadata_types)
+
+
+def _register_write_tools(mcp: FastMCP) -> None:
     @mcp.tool(name="create_file", annotations=ToolAnnotations(destructiveHint=True))
     async def mcp_create_file(
         path: str = Field(description="Path to the file in format /<space_name>/<path_to_file>"),
@@ -191,26 +220,6 @@ def register_module(mcp: FastMCP) -> None:
         Delete a given file or directory (recursively) by id or path.
         """
         return await delete_file(file_id_or_path)
-
-    @mcp.tool(name="get_file_metadata", annotations=ToolAnnotations(readOnlyHint=True))
-    async def mcp_get_file_metadata(
-        file_id_or_path: str = Field(
-            description="File id or path to the file in format /<space_name>/<path_to_file>"
-        ),
-        metadata_types: list[str] = Field(
-            description=(
-                "Which facets to fetch. Allowed names (multiple allowed): `json`, `rdf`, `xattrs`."
-            ),
-            default=["json", "rdf", "xattrs"],
-        ),
-    ) -> dict[str, Any]:
-        """
-        Get metadata for a given file id or path by metadata types.
-
-        For many metadata values from a single request, use
-        get_file_attributes with metadata-related attributes.
-        """
-        return await get_file_metadata(file_id_or_path, metadata_types)
 
     @mcp.tool(name="set_file_xattrs")
     async def mcp_set_file_xattrs(

@@ -1,3 +1,4 @@
+from ast import If
 import json
 from asyncio.log import logger
 from collections.abc import Iterable, Mapping, Sequence
@@ -206,8 +207,14 @@ async def get_file_attributes(
     return response["body"]
 
 
+def _looks_like_file_id(value: str) -> bool:
+    return value.startswith("00000000") and len(value) == 180 and value.isalnum()
+
+
 async def _normalize_path_to_file_id(file_id_or_path: str) -> str:
     """Resolve a logical path or opaque id through lookup-file-id; return opaque file ids unchanged."""
+    if _looks_like_file_id(file_id_or_path):
+        return file_id_or_path
 
     return await get_file_id(file_id_or_path)
 

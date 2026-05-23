@@ -72,6 +72,23 @@ async def test_get_file_id_maps_enoent_to_file_not_found(
 
 
 @pytest.mark.asyncio
+async def test_delete_file_accepts_opaque_file_id_without_lookup(
+    monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
+) -> None:
+    _set_env(monkeypatch)
+    file_id = "0000000000587328677569642373706163655Fexample"
+    httpx_mock.add_response(
+        method="DELETE",
+        url=f"https://provider.example/api/v3/oneprovider/data/{file_id}",
+        status_code=204,
+    )
+
+    await files.delete_file(file_id)
+
+    assert len(httpx_mock.get_requests()) == 1
+
+
+@pytest.mark.asyncio
 async def test_get_file_attributes_sends_selected_attributes(
     monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
 ) -> None:

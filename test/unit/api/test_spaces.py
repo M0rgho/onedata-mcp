@@ -44,9 +44,6 @@ async def test_list_available_spaces_fetches_from_oneprovider_and_maps_fields(
         "spaceId": "sp1",
         "name": "Space One",
         "providers": [{"providerId": "p1", "providerName": "Cloud1"}],
-        "dirId": "dir1",
-        "trashDirId": "trash1",
-        "archivesDirId": "arch1",
     }
     assert result[1]["spaceId"] == "sp2"
     assert "ignoredField" not in result[0]
@@ -177,6 +174,73 @@ async def test_list_space_datasets_passes_pagination_token(
     datasets_request = httpx_mock.get_requests()[-1]
     assert datasets_request.url.params["offset"] == "5"
     assert datasets_request.url.params["token"] == "abc"
+
+
+@pytest.mark.asyncio
+async def test_list_space_datasets_falls_back_to_data_access_on_data_path_caveat(
+    monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
+) -> None:
+    _set_oneprovider_env(monkeypatch)
+    httpx_mock.add_response(
+        method="GET",
+        url="https://provider.example/api/v3/oneprovider/spaces",
+        json=[{"spaceId": "sp1", "name": "my-space"}],
+        is_reusable=True,
+    )
+    httpx_mock.add_response(
+        method="GET",
+        url="https://provider.example/api/v3/oneprovider/spaces/sp1/datasets",
+        match_params={"state": "attached", "limit": "100", "offset": "0"},
+        status_code=401,
+        json={
+            "error": {
+                "id": "unauthorized",
+                "details": {
+                    "authError": {
+                        "id": "tokenCaveatUnverified",
+                        "details": {
+                            "caveat": {"type": "data.path", "whitelist": ["L21jcC1zcGFjZQ=="]}
+                        },
+                    }
+                },
+            }
+        },
+    )
+    httpx_mock.add_response(
+        method="POST",
+        url="https://provider.example/api/v3/oneprovider/lookup-file-id/%2Fmy-space",
+        json={"fileId": "root-dir-id"},
+    )
+    httpx_mock.add_response(
+        method="GET",
+        url="https://provider.example/api/v3/oneprovider/data/root-dir-id/children",
+        json={
+            "children": [
+                {"fileId": "dataset-dir-id", "name": "e2e-dataset-root", "type": "DIR"},
+            ]
+        },
+    )
+    httpx_mock.add_response(
+        method="GET",
+        url="https://provider.example/api/v3/oneprovider/data/dataset-dir-id/dataset/summary",
+        json={"directDataset": "d1", "effectiveAncestorDatasets": []},
+    )
+    httpx_mock.add_response(
+        method="GET",
+        url="https://provider.example/api/v3/oneprovider/datasets/d1",
+        json={
+            "state": "attached",
+            "datasetId": "d1",
+            "rootFilePath": "/my-space/e2e-dataset-root",
+            "rootFileType": "DIR",
+        },
+    )
+
+    result = await spaces.list_space_datasets("my-space", state="attached")
+
+    assert result["datasets"][0]["datasetId"] == "d1"
+    assert result["datasets"][0]["name"] == "e2e-dataset-root"
+    assert result["datasets"][0]["rootFilePath"] == "/my-space/e2e-dataset-root"
 
 
 @pytest.mark.asyncio

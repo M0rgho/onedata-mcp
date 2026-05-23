@@ -5,6 +5,7 @@ import sys
 from fastmcp import FastMCP
 
 from onedata_mcp.modules import files, harvesters, spaces
+from onedata_mcp.token_policy import resolve_register_write_tools_sync
 
 
 def _setup_logging() -> logging.Logger:
@@ -36,7 +37,8 @@ def _create_onedata_mcp_server() -> FastMCP:
     mcp = FastMCP(
         name="Onedata MCP Server",
         instructions="""
-    This is an MCP server for Onedata.
+    This is an MCP server for Onedata. It automatically registers tools based on token permissions.
+    If the token has the `data.readonly` caveat, tools that mutate data are not registered and won't be visible.
 
     Onedata is a distributed data management system for storing, sharing, and
     collaborating on data across providers and spaces.
@@ -49,7 +51,8 @@ def _create_onedata_mcp_server() -> FastMCP:
     """,
     )
 
-    files.register_module(mcp)
+    register_writers = resolve_register_write_tools_sync()
+    files.register_module(mcp, register_writers=register_writers)
     harvesters.register_module(mcp)
     spaces.register_module(mcp)
 
