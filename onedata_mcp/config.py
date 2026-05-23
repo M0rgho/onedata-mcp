@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 
 
 load_dotenv()
+os.environ.setdefault("PYDANTIC_ERRORS_INCLUDE_URL", "false")
 
 
 def get_onezone_config() -> OnedataConfig:
