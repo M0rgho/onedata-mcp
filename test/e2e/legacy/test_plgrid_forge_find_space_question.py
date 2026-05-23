@@ -3,7 +3,10 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-from assertions_lib import assert_required_tools_and_optional_policy
+from assertions_lib import (
+    assert_final_answer_contains_all,
+    assert_required_tools_and_optional_policy,
+)
 from e2e_types import E2EScenario
 from env_checks import forge_credentials_available, onedata_credentials_available
 from forge_harness import run_forge_scenario
@@ -22,18 +25,11 @@ pytestmark = [
     ),
 ]
 
-# Discovery + schema + query: model must find IDs and build the plugin payload itself.
-_MINIMAL_HARVESTER_TOOLS = frozenset(
-    {
-        "list_user_harvesters",
-        "get_harvester_index_schema",
-        "query_harvester_index",
-    }
-)
+_EXPECTED_SPACE_NAMES_SORTED = ("krk-iu", "krk-p", "openfoodfacts-images")
 
 
 @pytest.mark.parametrize("tool_context_mode", ["minimal", "full"])
-async def test_harvesters_minimal_context_discovers_then_queries(
+async def test_find_space_question_selects_list_available_spaces(
     request: Any,
     mcp_application: Any,
     forge_api_key: str,
@@ -42,17 +38,16 @@ async def test_harvesters_minimal_context_discovers_then_queries(
     tool_context_mode: str,
 ) -> None:
     scenario = E2EScenario(
-        name="harvester-min-tools",
+        name="find-space",
         user_prompt=(
-            "Query the Onedata harvester backing our openfoodfacts-images-style workspace "
-            "with a straightforward index lookup, and give a brief summary of the result."
+            "What Onedata spaces do I have access to? "
+            "I'd like a short list of the space names if you can figure that out."
         ),
-        required_tools=frozenset({"query_harvester_index"}),
-        allowed_tools_for_minimal_context=_MINIMAL_HARVESTER_TOOLS,
-        max_tool_rounds=14,
+        required_tools=frozenset({"list_available_spaces"}),
+        allowed_tools_for_minimal_context=frozenset({"list_available_spaces"}),
+        max_tokens=4096,
     )
-
-    outcome = await run_forge_scenario(
+    run = await run_forge_scenario(
         scenario=scenario,
         mcp_app=mcp_application,
         tool_context_mode=tool_context_mode,  # type: ignore[arg-type]
@@ -61,9 +56,11 @@ async def test_harvesters_minimal_context_discovers_then_queries(
         model=forge_model,
         pytest_request=request,
     )
-    assert_required_tools_and_optional_policy(outcome)
-    assert (outcome.final_assistant_text or "").strip(), "Model should summarise tool output."
-    if tool_context_mode == "minimal":
-        assert outcome.metrics.tools_in_context_count == len(_MINIMAL_HARVESTER_TOOLS)
-    else:
-        assert outcome.metrics.tools_in_context_count >= 10
+    assert run.metrics.tools_in_context_count >= 1
+    assert_required_tools_and_optional_policy(run)
+    assert run.metrics.all_tool_calls_ok
+    assert_final_answer_contains_all(
+        run,
+        _EXPECTED_SPACE_NAMES_SORTED,
+        hint="Each expected space name must appear in prose.",
+    )

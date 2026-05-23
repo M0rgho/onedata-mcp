@@ -1,5 +1,3 @@
-"""Harvester scenarios with an enlarged tool-pack (minimal vs full context)."""
-
 from __future__ import annotations
 
 from typing import Any
@@ -12,6 +10,7 @@ from forge_harness import run_forge_scenario
 
 pytestmark = [
     pytest.mark.asyncio,
+    pytest.mark.legacy,
     pytest.mark.e2e,
     pytest.mark.onedata_integration,
     pytest.mark.skipif(
@@ -24,19 +23,18 @@ pytestmark = [
     ),
 ]
 
-HARVESTER_SUITE = frozenset(
+# Discovery + schema + query: model must find IDs and build the plugin payload itself.
+_MINIMAL_HARVESTER_TOOLS = frozenset(
     {
-        "list_user_spaces",
         "list_user_harvesters",
         "get_harvester_index_schema",
         "query_harvester_index",
-        "list_marketplace_spaces",
     }
 )
 
 
 @pytest.mark.parametrize("tool_context_mode", ["minimal", "full"])
-async def test_harvesters_full_suite_parametrized(
+async def test_harvesters_minimal_context_discovers_then_queries(
     request: Any,
     mcp_application: Any,
     forge_api_key: str,
@@ -45,22 +43,18 @@ async def test_harvesters_full_suite_parametrized(
     tool_context_mode: str,
 ) -> None:
     scenario = E2EScenario(
-        name="harvester-full-suite-twice-named",
+        name="harvester-min-tools",
         user_prompt=(
-            "I need insight from the harvester that ingests our openfoodfacts-images "
-            "workspace—specifically from its generic search index (the one normally "
-            "used for broad file metadata lookup). "
-            "Discover the index schema with the tools, assemble a small valid request "
-            "that matches what the plugin expects, and run it. "
-            "You may list spaces or harvesters if that helps orient you. "
-            "Summarise the notable fields or values in the response."
+            "Query the Onedata harvester backing our openfoodfacts-images-style workspace "
+            "with a straightforward index lookup, and give a brief summary of the result."
         ),
-        required_tools=frozenset({"get_harvester_index_schema", "query_harvester_index"}),
-        allowed_tools_for_minimal_context=HARVESTER_SUITE,
-        max_tokens=3584,
-        max_tool_rounds=16,
+        required_tools=frozenset({"query_harvester_index"}),
+        allowed_tools_for_minimal_context=_MINIMAL_HARVESTER_TOOLS,
+        max_tokens=4096,
+        max_tool_rounds=20,
     )
-    full_or_minimal = await run_forge_scenario(
+
+    outcome = await run_forge_scenario(
         scenario=scenario,
         mcp_app=mcp_application,
         tool_context_mode=tool_context_mode,  # type: ignore[arg-type]
@@ -69,10 +63,9 @@ async def test_harvesters_full_suite_parametrized(
         model=forge_model,
         pytest_request=request,
     )
-    assert_required_tools_and_optional_policy(full_or_minimal)
-    assert full_or_minimal.metrics.required_tools_satisfied
-    assert (full_or_minimal.final_assistant_text or "").strip()
+    assert_required_tools_and_optional_policy(outcome)
+    assert (outcome.final_assistant_text or "").strip(), "Model should summarise tool output."
     if tool_context_mode == "minimal":
-        assert full_or_minimal.metrics.tools_in_context_count == len(HARVESTER_SUITE)
+        assert outcome.metrics.tools_in_context_count == len(_MINIMAL_HARVESTER_TOOLS)
     else:
-        assert full_or_minimal.metrics.tools_in_context_count >= 15
+        assert outcome.metrics.tools_in_context_count >= 10

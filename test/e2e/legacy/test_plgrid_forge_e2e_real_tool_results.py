@@ -6,7 +6,6 @@ import pytest
 from assertions_lib import (
     assert_final_answer_contains_all,
     assert_required_tools_and_optional_policy,
-    recall_for_names_in_text,
 )
 from e2e_types import E2EScenario
 from env_checks import forge_credentials_available, onedata_credentials_available
@@ -14,6 +13,7 @@ from forge_harness import run_forge_scenario
 
 pytestmark = [
     pytest.mark.asyncio,
+    pytest.mark.legacy,
     pytest.mark.e2e,
     pytest.mark.onedata_integration,
     pytest.mark.skipif(
@@ -26,13 +26,11 @@ pytestmark = [
     ),
 ]
 
-
-# Reference PLGrid tenant: generic list_user_spaces answer must still name both krk spaces.
-_EXPECTED_KRK_SPACES = frozenset({"krk-p", "krk-iu"})
+_EXPECTED_KRK_SPACE_NAMES = ("krk-iu", "krk-p")
 
 
 @pytest.mark.parametrize("tool_context_mode", ["minimal", "full"])
-async def test_e2e_space_list_includes_krk_without_prompting_names(
+async def test_e2e_live_lists_spaces_and_names_krk_p_or_iu(
     request: Any,
     mcp_application: Any,
     forge_api_key: str,
@@ -40,16 +38,14 @@ async def test_e2e_space_list_includes_krk_without_prompting_names(
     forge_base_url: str,
     tool_context_mode: str,
 ) -> None:
-    expected = _EXPECTED_KRK_SPACES
     scenario = E2EScenario(
-        name="list-spaces-expect-krk-subset",
+        name="real-spaces-single-name",
         user_prompt=(
-            "Please use Onedata and tell me every workspace I'm enrolled in—"
-            "just the space names, nothing else I need to act on."
+            "What Onedata spaces do I have access to right now? "
+            "Please list each space name you can see so I know what's on my account."
         ),
-        required_tools=frozenset({"list_user_spaces"}),
-        allowed_tools_for_minimal_context=frozenset({"list_user_spaces"}),
-        max_tokens=4096,
+        required_tools=frozenset({"list_available_spaces"}),
+        allowed_tools_for_minimal_context=frozenset({"list_available_spaces"}),
     )
     run = await run_forge_scenario(
         scenario=scenario,
@@ -62,10 +58,8 @@ async def test_e2e_space_list_includes_krk_without_prompting_names(
     )
     assert_required_tools_and_optional_policy(run)
     assert run.metrics.all_tool_calls_ok
-    recall = recall_for_names_in_text(expected, run.final_assistant_text)
-    assert recall >= 1.0, f"Expected all {sorted(expected)} names in answer"
     assert_final_answer_contains_all(
         run,
-        sorted(expected),
-        hint="Both reference krk spaces must appear but were not named in the user message.",
+        _EXPECTED_KRK_SPACE_NAMES,
+        hint="Each expected krk space name must appear in the prose answer.",
     )

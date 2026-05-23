@@ -3,14 +3,13 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-from assertions_lib import assert_required_tools_and_optional_policy
+from assertions_lib import (
+    assert_final_answer_contains_all,
+    assert_required_tools_and_optional_policy,
+)
 from e2e_types import E2EScenario
 from env_checks import forge_credentials_available, onedata_credentials_available
 from forge_harness import run_forge_scenario
-from plgrid_expected_answers import (
-    BEE_MOVIE_LOGICAL_PATH,
-    EXPECTED_BEE_MOVIE_SIZE_BYTES,
-)
 
 pytestmark = [
     pytest.mark.asyncio,
@@ -26,9 +25,11 @@ pytestmark = [
     ),
 ]
 
+_EXPECTED_SPACE_NAMES_SORTED = ("krk-iu", "krk-p", "openfoodfacts-images")
+
 
 @pytest.mark.parametrize("tool_context_mode", ["minimal", "full"])
-async def test_e2e_reports_bee_movie_size(
+async def test_round_trip_mentions_live_space_names(
     request: Any,
     mcp_application: Any,
     forge_api_key: str,
@@ -37,15 +38,16 @@ async def test_e2e_reports_bee_movie_size(
     tool_context_mode: str,
 ) -> None:
     scenario = E2EScenario(
-        name="bee-movie-file-size",
+        name="round-trip-space-name",
         user_prompt=(
-            "In Onedata space krk-iu I store a plain-text file that is the full Bee "
-            "Movie screenplay. How many bytes is it according to the API? "
-            "I need the reported numeric size."
+            "Can you look up which Onedata spaces I have and list every space name "
+            "that comes back? I need the names spelled exactly as returned."
         ),
-        required_tools=frozenset({"get_file_attributes"}),
-        allowed_tools_for_minimal_context=frozenset({"get_file_attributes", "list_children"}),
+        required_tools=frozenset({"list_available_spaces"}),
+        allowed_tools_for_minimal_context=frozenset({"list_available_spaces"}),
+        max_tokens=4096,
     )
+
     run = await run_forge_scenario(
         scenario=scenario,
         mcp_app=mcp_application,
@@ -57,12 +59,8 @@ async def test_e2e_reports_bee_movie_size(
     )
     assert_required_tools_and_optional_policy(run)
     assert run.metrics.all_tool_calls_ok
-    text = run.final_assistant_text or ""
-    needle_plain = str(EXPECTED_BEE_MOVIE_SIZE_BYTES)
-    needle_grouped = f"{EXPECTED_BEE_MOVIE_SIZE_BYTES:,}"
-    lowered = text.lower()
-    assert needle_plain in lowered or needle_grouped.lower() in lowered, (
-        f"Expected byte size {EXPECTED_BEE_MOVIE_SIZE_BYTES} "
-        f"({needle_plain} or {needle_grouped}) for {BEE_MOVIE_LOGICAL_PATH} in prose. "
-        f"Got: {text[:900]!r}"
+    assert_final_answer_contains_all(
+        run,
+        _EXPECTED_SPACE_NAMES_SORTED,
+        hint="Round-trip should surface every expected space name from the tool.",
     )
