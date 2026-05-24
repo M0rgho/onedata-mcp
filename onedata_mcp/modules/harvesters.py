@@ -1,10 +1,11 @@
-from typing import Any, Literal
+from typing import Any
 
 from fastmcp import FastMCP
 from mcp.types import ToolAnnotations
 from pydantic import Field
 
 from onedata_mcp.api.harvesters import (
+    HarvesterIndexQuery,
     get_harvester_index_schema,
     list_user_harvesters,
     query_harvester_index,
@@ -47,50 +48,43 @@ def register_module(mcp: FastMCP) -> None:
     async def mcp_query_harvester_index(
         harvester_id: str = Field(description="Harvester id"),
         index_id: str = Field(description="Harvester index id"),
-        method: Literal["get", "post"] = Field(description="HTTP method (get or post)"),
-        path: str = Field(
+        query: HarvesterIndexQuery = Field(
             description=(
-                "Backend-relative path forwarded to the harvester plugin. "
-                "For Elasticsearch: _mapping, _search, _count, or a document _id from a prior hit."
-            ),
-        ),
-        body: dict[str, Any] | None = Field(
-            default=None,
-            description=(
-                "JSON object for POST requests (Elasticsearch query DSL in body). "
-                "Not used when method is get."
+                "Harvester request: method (get or post), path, and optional body. "
+                "Pass body as a JSON object (Elasticsearch DSL for POST _search), not a string."
             ),
         ),
     ) -> dict[str, Any]:
         """
         Execute a harvester index request against the backing store (Elasticsearch-style).
 
-        Onezone forwards ``method``, ``path``, and optional ``body`` to the plugin. Inspect
-        field names via ``get_harvester_index_schema`` first; file metadata often appears
+        Pass ``harvester_id``, ``index_id``, and a single ``query`` object with ``method``,
+        ``path``, and optional ``body``. Onezone forwards that triple to the plugin; this tool
+        returns parsed Elasticsearch JSON (not the raw Onezone wrapper).
+
+        Inspect field names via ``get_harvester_index_schema`` first; file metadata often appears
         under ``__onedata.*`` (e.g. ``fileName``, ``fileId``, ``path``).
 
-        Workflow: ``GET`` with ``path`` ``_mapping`` and no ``body``, then ``POST`` with
-        ``path`` ``_search`` and a query DSL dict in ``body``.
+        **Path allowlist (Onezone ES backend):** only ``_search`` is accepted on ``POST``.
+        Paths like ``_count`` return HTTP 400. Use ``GET`` with ``_mapping`` for mapping JSON,
+        or ``GET`` with a document id from a prior ``_search`` hit.
 
-        Omit ``body`` for GET; for POST the ES payload is passed as structured fields (dict),
-        not a serialized JSON string.
+        Workflow: ``query`` with ``method`` ``get`` and ``path`` ``_mapping`` (no ``body``), then
+        ``method`` ``post``, ``path`` ``_search``, and Elasticsearch DSL in ``body``.
 
-        Examples (``method`` / ``path`` / ``body``):
+        Example ``query`` values:
 
-        - Mapping: ``get``, ``_mapping``, no body.
-        - Sample hit: ``post``, ``_search``, ``{"size": 1, "query": {"match_all": {}}}``.
-        - Term on filename: ``post``, ``_search``, ``term`` on ``__onedata.fileName``
-          (set ``size``).
-        - Harvested JSON field: ``post``, ``_search``, e.g.
-          ``{"query": {"term": {"enabled": true}}}``.
-        - OR query: ``post``, ``_search``, ``bool`` with ``should`` (``term``, ``range``, …).
-        - Trim payloads: include ``"_source": ["__onedata.fileName", "__onedata.fileId"]``
-          in the ``_search`` body.
-        - Count hits: ``post``, ``_count``, ``{"query": {"match_all": {}}}``.
-        - Doc by ES id: ``get``, literal document id path, no body
-          (id from a prior ``_search`` hit).
+        - Mapping: ``{"method": "get", "path": "_mapping"}``.
+        - Sample hit: ``{"method": "post", "path": "_search", "body": {"size": 1, "query": {"match_all": {}}}}``.
+        - Hit count (not ``_count``): ``{"method": "post", "path": "_search", "body": {"size": 0,
+          "track_total_hits": true, "query": {"match_all": {}}}}`` — read ``hits.total.value``.
+        - Term on filename: ``post`` / ``_search`` with ``term`` on ``__onedata.fileName`` (set ``size``).
+        - Harvested JSON field: e.g. ``{"query": {"term": {"enabled": true}}}`` in ``body``.
+        - OR query: ``bool`` with ``should`` in ``body``.
+        - Trim payloads: ``"_source": ["__onedata.fileName", "__onedata.fileId"]`` in ``body``.
+        - Doc by ES id: ``{"method": "get", "path": "<document_id>"}`` (id from a prior hit).
 
         From ``_search`` hits, resolve files on Oneprovider via ``__onedata.path`` or file id
         through ``get_file_id`` / ``get_file_attributes``.
         """
-        return await query_harvester_index(harvester_id, index_id, method, path, body)
+        return await query_harvester_index(harvester_id, index_id, query)

@@ -33,22 +33,31 @@ def _setup_logging() -> logging.Logger:
     return logging.getLogger("onedata-mcp-server")
 
 
+ONEDATA_MCP_SERVER_INSTRUCTIONS = """
+This is an MCP server for Onedata. Tools depend on token permissions: if the token has the
+`data.readonly` caveat, mutating tools are not registered.
+
+Onedata stores data in spaces. Files are addressed by logical path `/<space_name>/<path_to_file>`
+or by file id. Shared PLGrid spaces often use `/<space>/<space>/…` for dataset files.
+
+How to work efficiently:
+- When the user names a file (basename or full path), open it with `get_file_metadata` or
+  `get_file_attributes` on the logical path. Do not walk `list_files` pages (token/offset) to
+  hunt for one filename in a large directory.
+- When you only know a filename and not the path, resolve it with the space harvester index
+  (`query_harvester_index` on `__onedata.fileName` / `__onedata.path`) or `list_files_recursive`
+  with a matching `prefix`. Do not scan thousands of entries via repeated `list_files`.
+- Use `list_files` only to explore an unknown directory structure, not to find one known file.
+
+Harvester indexes (Elasticsearch-style) hold searchable document fields plus `__onedata.*` file
+fields. Inspect `get_harvester_index_schema` before querying.
+""".strip()
+
+
 def _create_onedata_mcp_server() -> FastMCP:
     mcp = FastMCP(
         name="Onedata MCP Server",
-        instructions="""
-    This is an MCP server for Onedata. It automatically registers tools based on token permissions.
-    If the token has the `data.readonly` caveat, tools that mutate data are not registered and won't be visible.
-
-    Onedata is a distributed data management system for storing, sharing, and
-    collaborating on data across providers and spaces.
-
-    Core entities:
-    - Spaces: top-level shared workspaces grouping files, users, and providers.
-    - Providers: services that store data and expose Oneprovider APIs.
-    - Files/directories: data objects addressable by file id
-      or logical path (/<space_name>/<path_to_file>).
-    """,
+        instructions=ONEDATA_MCP_SERVER_INSTRUCTIONS,
     )
 
     register_writers = resolve_register_write_tools_sync()

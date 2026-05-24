@@ -46,7 +46,7 @@ def _register_read_tools(mcp: FastMCP) -> None:
         attributes: Optional[list[str]] = Field(
             default=None,
             description="""
-            (Optional) Additional attribute names to return for the file.
+            (Optional) JSON array of attribute names to return for the file.
             Allowed values:
             - Identity/location: fileId, parentFileId, index, name, conflictingName, path, type
             - Permissions/access: activePermissionsType, posixPermissions, acl
@@ -94,6 +94,9 @@ def _register_read_tools(mcp: FastMCP) -> None:
     ) -> dict[str, Any]:
         """
         Shallow listing: a single level of files and subdirectories under the path or id.
+
+        Not for locating one known filename in a large folder — use `get_file_metadata` on the
+        logical path, the harvester index (`__onedata.fileName`), or `list_files_recursive`.
         """
         return await list_files(
             parent_id_or_path, attributes=attributes, limit=limit, offset=offset, token=token

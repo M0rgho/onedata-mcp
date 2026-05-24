@@ -2,6 +2,8 @@ import asyncio
 import json
 from typing import Any, Literal
 
+from pydantic import BaseModel, Field
+
 from onedata_mcp.api.spaces import list_available_spaces
 from onedata_mcp.config import get_onezone_config
 from onedata_mcp.utils import request
@@ -20,8 +22,41 @@ def build_onezone_harvester_query(
 
 
 def harvester_es_search_query(es_body: dict[str, Any]) -> dict[str, Any]:
-    """Elasticsearch ``_search`` request body for ``query_harvester_index`` (``POST``)."""
+    """Elasticsearch ``_search`` payload for ``query.body`` on a ``POST`` ``_search`` request."""
     return es_body
+
+
+class HarvesterIndexQuery(BaseModel):
+    """Harvester index request forwarded to the plugin (``method``, ``path``, optional ES ``body``)."""
+
+    method: Literal["get", "post"] = Field(description="HTTP method (get or post)")
+    path: str = Field(
+        description=(
+            "Backend-relative path. On Onezone ES harvesters, POST must be _search; "
+            "GET may be _mapping or a document id from a prior _search hit."
+        ),
+    )
+    body: dict[str, Any] | None = Field(
+        default=None,
+        description="Elasticsearch query DSL for POST _search; omit for GET.",
+    )
+
+
+def harvester_index_query(
+    method: Literal["get", "post"] | str,
+    path: str,
+    body: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Build the ``query`` object for ``query_harvester_index``."""
+    normalized = str(method).lower()
+    if normalized not in ("get", "post"):
+        msg = f"method must be get or post, got {method!r}"
+        raise ValueError(msg)
+    return HarvesterIndexQuery(
+        method=normalized,  # type: ignore[arg-type]
+        path=path,
+        body=body,
+    ).model_dump(exclude_none=True)
 
 
 async def get_user_harvester(harvester_id: str) -> dict[str, Any]:
@@ -165,12 +200,15 @@ def unwrap_harvester_query_response(payload: Any) -> Any:
 async def query_harvester_index(
     harvester_id: str,
     index_id: str,
-    method: Literal["get", "post"] | str,
-    path: str,
-    body: dict[str, Any] | None = None,
+    query: HarvesterIndexQuery | dict[str, Any],
 ) -> dict[str, Any]:
+    q = (
+        query
+        if isinstance(query, HarvesterIndexQuery)
+        else HarvesterIndexQuery.model_validate(query)
+    )
     config = get_onezone_config()
-    onezone_query = build_onezone_harvester_query(method, path, body)
+    onezone_query = build_onezone_harvester_query(q.method, q.path, q.body)
     response = await request(
         config,
         "POST",
