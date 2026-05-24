@@ -13,6 +13,7 @@ def register_module(mcp: FastMCP) -> None:
     @mcp.tool(
         name="list_available_spaces",
         description="List Onedata spaces supported by the connected Oneprovider",
+        annotations=ToolAnnotations(readOnlyHint=True),
     )
     async def mcp_list_available_spaces() -> list[dict]:
         """
