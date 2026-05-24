@@ -267,6 +267,66 @@ async def test_forge_list_children(
     )
 
 
+@pytest.mark.e2e_scenario("grep-multi-file")
+async def test_forge_grep_multi_file(
+    request: Any,
+    mcp_application_isolated: Any,
+    isolated_e2e_space: IsolatedE2ESpace,
+    onedata_admin_token: str,
+    forge_api_key: str,
+    forge_model: str,
+    forge_base_url: str,
+) -> None:
+    parent = f"{isolated_e2e_space.root_path}/e2e-grep-multi"
+    needle = "E2E_FORGE_GREP_MARKER"
+    target_basename = "has-marker.txt"
+    target_path = f"{parent}/{target_basename}"
+
+    async def setup(space: IsolatedE2ESpace, admin: str) -> None:
+        _ = space
+        await seed_file(f"{parent}/plain-a.txt", "alpha only\n", admin_token=admin)
+        await seed_file(target_path, f"before\n{needle}\nafter\n", admin_token=admin)
+        await seed_file(f"{parent}/plain-b.txt", "beta only\n", admin_token=admin)
+
+    async def verify(space: IsolatedE2ESpace, app: Any) -> None:
+        _ = space
+        grep_out = await mcp_tool_json_result(
+            app,
+            "grep_file_content",
+            {"file_id_or_path": target_path, "pattern": needle},
+        )
+        assert isinstance(grep_out, str)
+        assert needle in grep_out
+
+    scenario = E2EScenario(
+        name="isolated-forge-grep-multi-file",
+        system_prompt=_ISOLATED_SYSTEM,
+        user_prompt=(
+            f"Under {parent!r} there are three text files: plain-a.txt, {target_basename}, "
+            f"and plain-b.txt. Use grep_file_content to find which file contains the literal "
+            f"{needle!r} and report its basename."
+        ),
+        required_tools=frozenset({"grep_file_content"}),
+        allowed_tools_for_minimal_context=frozenset({"grep_file_content"}),
+        require_no_extra_tool_calls=False,
+        forbidden_tools=frozenset({"download_file", "create_file"}),
+    )
+
+    await run_isolated_forge_scenario(
+        scenario=scenario,
+        space=isolated_e2e_space,
+        mcp_app=mcp_application_isolated,
+        tool_context_mode="full",
+        forge_api_key=forge_api_key,
+        forge_base_url=forge_base_url,
+        model=forge_model,
+        pytest_request=request,
+        admin_token=onedata_admin_token,
+        setup=setup,
+        verify_state=verify,
+    )
+
+
 @pytest.mark.e2e_scenario("file-size-bytes")
 async def test_forge_file_size_bytes(
     request: Any,

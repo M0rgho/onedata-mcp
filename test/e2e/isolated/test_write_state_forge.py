@@ -10,7 +10,7 @@ from e2e_types import E2EScenario
 from env_checks import forge_credentials_available, onedata_credentials_available
 from forge_isolated_harness import run_isolated_forge_scenario
 from isolated_helpers import child_names, seed_file
-from plgrid_ground_truth import mcp_tool_json_result
+from plgrid_ground_truth import ground_truth_file_size_bytes, mcp_tool_json_result
 
 from onedata_mcp.api.files import get_file_metadata, set_file_metadata, set_file_xattrs
 
@@ -32,8 +32,7 @@ pytestmark = [
     pytest.mark.skipif(
         not onedata_credentials_available(),
         reason=(
-            "ONEDATA_ONEZONE_* and ONEDATA_ONEPROVIDER_* required "
-            "(see docs/e2e-isolated-spaces.md)"
+            "ONEDATA_ONEZONE_* and ONEDATA_ONEPROVIDER_* required (see docs/e2e-isolated-spaces.md)"
         ),
     ),
     pytest.mark.skipif(
@@ -84,6 +83,63 @@ async def test_forge_create_xattr_delete(
             f"(create_parents=true), list children of {parent!r} to confirm {basename!r} "
             f"exists, set xattr testRunId={run_id!r} on that file, verify with "
             "get_file_metadata (xattrs only), then delete the file and list the parent again."
+        ),
+        required_tools=write_tools,
+        allowed_tools_for_minimal_context=write_tools,
+        require_no_extra_tool_calls=False,
+    )
+
+    await run_isolated_forge_scenario(
+        scenario=scenario,
+        space=isolated_e2e_space,
+        mcp_app=mcp_application_isolated,
+        tool_context_mode="full",
+        forge_api_key=forge_api_key,
+        forge_base_url=forge_base_url,
+        model=forge_model,
+        pytest_request=request,
+        admin_token=onedata_admin_token,
+        verify_state=verify,
+    )
+
+
+@pytest.mark.e2e_scenario("create-nested")
+async def test_forge_create_nested(
+    request: Any,
+    mcp_application_isolated: Any,
+    isolated_e2e_space: IsolatedE2ESpace,
+    onedata_admin_token: str,
+    forge_api_key: str,
+    forge_model: str,
+    forge_base_url: str,
+) -> None:
+    nested_path = f"{isolated_e2e_space.root_path}/deep/new-dir/leaf.txt"
+    expected_content = "forge-nested-leaf\n"
+    write_tools = frozenset({"create_file", "download_file", "get_file_id"})
+
+    async def verify(space: IsolatedE2ESpace, app: Any) -> None:
+        _ = space
+        file_id = await mcp_tool_json_result(app, "get_file_id", {"path": nested_path})
+        assert isinstance(file_id, str) and file_id
+
+        size = await ground_truth_file_size_bytes(app, nested_path)
+        assert size == len(expected_content.encode())
+
+        grep_out = await mcp_tool_json_result(
+            app,
+            "grep_file_content",
+            {"file_id_or_path": nested_path, "pattern": "forge-nested-leaf"},
+        )
+        assert isinstance(grep_out, str)
+        assert "forge-nested-leaf" in grep_out
+
+    scenario = E2EScenario(
+        name="isolated-forge-create-nested",
+        system_prompt=_ISOLATED_SYSTEM,
+        user_prompt=(
+            f"Create file {nested_path!r} with exact content {expected_content!r}. "
+            "The parent directories do not exist yet — use create_parents=true. "
+            "Then download the file and confirm the bytes match what you wrote."
         ),
         required_tools=write_tools,
         allowed_tools_for_minimal_context=write_tools,
