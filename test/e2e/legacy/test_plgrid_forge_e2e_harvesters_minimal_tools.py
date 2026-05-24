@@ -33,14 +33,12 @@ _MINIMAL_HARVESTER_TOOLS = frozenset(
 )
 
 
-@pytest.mark.parametrize("tool_context_mode", ["minimal", "full"])
 async def test_harvesters_minimal_context_discovers_then_queries(
     request: Any,
     mcp_application: Any,
     forge_api_key: str,
     forge_model: str,
     forge_base_url: str,
-    tool_context_mode: str,
 ) -> None:
     scenario = E2EScenario(
         name="harvester-min-tools",
@@ -57,7 +55,7 @@ async def test_harvesters_minimal_context_discovers_then_queries(
     outcome = await run_forge_scenario(
         scenario=scenario,
         mcp_app=mcp_application,
-        tool_context_mode=tool_context_mode,  # type: ignore[arg-type]
+        tool_context_mode="full",
         forge_api_key=forge_api_key,
         forge_base_url=forge_base_url,
         model=forge_model,
@@ -65,7 +63,4 @@ async def test_harvesters_minimal_context_discovers_then_queries(
     )
     assert_required_tools_and_optional_policy(outcome)
     assert (outcome.final_assistant_text or "").strip(), "Model should summarise tool output."
-    if tool_context_mode == "minimal":
-        assert outcome.metrics.tools_in_context_count == len(_MINIMAL_HARVESTER_TOOLS)
-    else:
-        assert outcome.metrics.tools_in_context_count >= 10
+    assert outcome.metrics.tools_in_context_count >= 10

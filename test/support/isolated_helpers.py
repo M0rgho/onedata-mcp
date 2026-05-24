@@ -12,6 +12,7 @@ from e2e_isolated_space import (
 from onedata_mcp.api.files import create_file, create_file_bytes
 from onedata_mcp.api.harvesters import (
     harvester_es_search_query,
+    harvester_index_query,
     list_user_harvesters,
     unwrap_harvester_query_response,
 )
@@ -151,9 +152,11 @@ async def wait_for_harvester_hits(
         body = await query_harvester_index(
             harvester_id,
             index_id,
-            "post",
-            "_search",
-            harvester_es_search_query({"size": 0, "query": {"match_all": {}}}),
+            harvester_index_query(
+                "post",
+                "_search",
+                harvester_es_search_query({"size": 0, "query": {"match_all": {}}}),
+            ),
         )
         last_total = es_hits_total(body)
         if last_total is not None and last_total >= min_hits:

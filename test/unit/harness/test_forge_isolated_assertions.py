@@ -6,7 +6,9 @@ import pytest
 
 from assertions_lib import (
     assert_forbidden_tools,
+    assert_isolated_forge_trace,
     assert_tool_arguments_stay_in_isolated_space,
+    summarize_failed_tool_calls,
 )
 from e2e_isolated_space import IsolatedE2ESpace
 from e2e_types import E2EScenario, ForgeRunResult, RunMetrics, ToolCallMetric
@@ -20,12 +22,21 @@ def _space() -> IsolatedE2ESpace:
     )
 
 
-def _run(*, tools: list[ToolCallMetric], forbidden: frozenset[str] = frozenset()) -> ForgeRunResult:
+def _run(
+    *,
+    tools: list[ToolCallMetric],
+    forbidden: frozenset[str] = frozenset(),
+    required_tools: frozenset[str] | None = None,
+    final_text: str = "ok",
+) -> ForgeRunResult:
+    required = (
+        required_tools if required_tools is not None else frozenset({"list_available_spaces"})
+    )
     scenario = E2EScenario(
         name="t",
         user_prompt="p",
-        required_tools=frozenset({"list_available_spaces"}),
-        allowed_tools_for_minimal_context=frozenset({"list_available_spaces"}),
+        required_tools=required,
+        allowed_tools_for_minimal_context=required,
         forbidden_tools=forbidden,
     )
     metrics = RunMetrics(tools_in_context_count=1, tool_call_count=len(tools), tool_calls=tools)
@@ -35,10 +46,49 @@ def _run(*, tools: list[ToolCallMetric], forbidden: frozenset[str] = frozenset()
         tool_context_mode="minimal",
         dispatch_mode="mcp",
         metrics=metrics,
-        final_assistant_text="ok",
+        final_assistant_text=final_text,
         finish_reason="stop",
         raw_tool_names_in_order=[t.tool_name for t in tools],
     )
+
+
+def test_assert_isolated_forge_trace_allows_failed_retry() -> None:
+    run = _run(
+        required_tools=frozenset({"get_file_id", "get_file_attributes"}),
+        tools=[
+            ToolCallMetric("get_file_id", 1.0, True),
+            ToolCallMetric(
+                "get_file_attributes",
+                1.0,
+                False,
+                error="attributes must be a list",
+            ),
+            ToolCallMetric("get_file_attributes", 1.0, True),
+        ],
+        final_text="file id and path retrieved",
+    )
+    assert_isolated_forge_trace(run)
+    failed = summarize_failed_tool_calls(run)
+    assert len(failed) == 1
+    assert failed[0]["tool_name"] == "get_file_attributes"
+
+
+def test_assert_isolated_forge_trace_requires_nonempty_final_answer() -> None:
+    run = _run(tools=[ToolCallMetric("list_available_spaces", 1.0, True)], final_text="  ")
+    with pytest.raises(AssertionError, match="non-empty final assistant"):
+        assert_isolated_forge_trace(run)
+
+
+def test_assert_isolated_forge_trace_requires_successful_required_tool() -> None:
+    run = _run(
+        required_tools=frozenset({"get_file_attributes"}),
+        tools=[
+            ToolCallMetric("get_file_attributes", 1.0, False, error="validation error"),
+        ],
+        final_text="here is the answer anyway",
+    )
+    with pytest.raises(AssertionError, match="never succeeded"):
+        assert_isolated_forge_trace(run)
 
 
 def test_assert_forbidden_tools_rejects_blocked_tool() -> None:

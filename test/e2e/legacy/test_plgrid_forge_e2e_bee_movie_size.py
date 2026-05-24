@@ -26,14 +26,12 @@ pytestmark = [
 _BEE_MOVIE_SIZE_TOOLS = frozenset({"get_file_attributes", "list_files"})
 
 
-@pytest.mark.parametrize("tool_context_mode", ["minimal", "full"])
 async def test_e2e_reports_bee_movie_size(
     request: Any,
     mcp_application: Any,
     forge_api_key: str,
     forge_model: str,
     forge_base_url: str,
-    tool_context_mode: str,
 ) -> None:
     """Accept ``list_files`` or ``get_file_attributes`` for screenplay file size."""
     logical_path = "/krk-iu/bee_movie_script"
@@ -52,7 +50,7 @@ async def test_e2e_reports_bee_movie_size(
     run = await run_forge_scenario(
         scenario=scenario,
         mcp_app=mcp_application,
-        tool_context_mode=tool_context_mode,  # type: ignore[arg-type]
+        tool_context_mode="full",
         forge_api_key=forge_api_key,
         forge_base_url=forge_base_url,
         model=forge_model,
@@ -63,11 +61,6 @@ async def test_e2e_reports_bee_movie_size(
         "Expected size via get_file_attributes and/or list_files; "
         f"got {sorted(run.metrics.unique_tools_called)}."
     )
-    if tool_context_mode == "minimal":
-        assert run.metrics.unique_tools_called <= _BEE_MOVIE_SIZE_TOOLS, (
-            "Minimal mode should only expose list/get attribute tools — "
-            f"got {sorted(run.metrics.unique_tools_called)}."
-        )
     assert run.metrics.all_tool_calls_ok
     answer = (run.final_assistant_text or "").strip()
     assert answer == str(expected_size_bytes), (

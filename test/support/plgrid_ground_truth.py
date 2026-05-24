@@ -5,11 +5,12 @@ from typing import Any
 
 from env_checks import KRK_SPACES
 from fastmcp import FastMCP
+from mcp_write_guard import guarded_call_tool
 from tool_serialization import tool_result_to_text
 
 
 async def mcp_tool_json_result(app: FastMCP, name: str, arguments: dict[str, Any]) -> Any:
-    result = await app.call_tool(name, arguments)
+    result = await guarded_call_tool(app, name, arguments)
     raw = tool_result_to_text(result)
     return json.loads(raw)
 
@@ -26,8 +27,14 @@ async def ground_truth_user_space_names(app: FastMCP) -> list[str]:
 
 
 async def ground_truth_krk_space_subset(app: FastMCP) -> frozenset[str]:
+    """Names from :data:`env_checks.KRK_SPACES` present on the connected provider."""
+
     all_names = frozenset(await ground_truth_user_space_names(app))
     return frozenset(all_names & KRK_SPACES)
+
+
+async def ground_truth_shared_reference_space_subset(app: FastMCP) -> frozenset[str]:
+    return await ground_truth_krk_space_subset(app)
 
 
 async def ground_truth_first_harvester_index(app: FastMCP) -> tuple[str, str] | None:

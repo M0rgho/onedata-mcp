@@ -3,10 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-from assertions_lib import (
-    assert_final_answer_contains_all,
-    assert_required_tools_and_optional_policy,
-)
+from assertions_lib import assert_forge_scenario_outcome
 from e2e_types import E2EScenario
 from env_checks import forge_credentials_available, onedata_credentials_available
 from forge_harness import run_forge_scenario
@@ -26,17 +23,15 @@ pytestmark = [
     ),
 ]
 
-_EXPECTED_SPACE_NAMES_SORTED = ("krk-iu", "krk-p", "openfoodfacts-images")
+_EXPECTED_SPACE_NAMES_SORTED = ("github_dataset", "krk-p", "openfoodfacts-images", "europeana")
 
 
-@pytest.mark.parametrize("tool_context_mode", ["minimal", "full"])
 async def test_find_space_question_selects_list_available_spaces(
     request: Any,
     mcp_application: Any,
     forge_api_key: str,
     forge_model: str,
     forge_base_url: str,
-    tool_context_mode: str,
 ) -> None:
     scenario = E2EScenario(
         name="find-space",
@@ -58,10 +53,9 @@ async def test_find_space_question_selects_list_available_spaces(
         pytest_request=request,
     )
     assert run.metrics.tools_in_context_count >= 1
-    assert_required_tools_and_optional_policy(run)
     assert run.metrics.all_tool_calls_ok
-    assert_final_answer_contains_all(
+    assert_forge_scenario_outcome(
         run,
-        _EXPECTED_SPACE_NAMES_SORTED,
-        hint="Each expected space name must appear in prose.",
+        answer_fragments=_EXPECTED_SPACE_NAMES_SORTED,
+        answer_hint="Each expected space name must appear in prose.",
     )

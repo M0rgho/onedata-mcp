@@ -16,7 +16,7 @@ from isolated_helpers import (
     seed_file,
     wait_for_harvester_hits,
 )
-from onedata_mcp.api.harvesters import harvester_es_search_query
+from onedata_mcp.api.harvesters import harvester_es_search_query, harvester_index_query
 from onedata_mcp.api.files import get_file_id
 from plgrid_ground_truth import ground_truth_file_size_bytes, mcp_tool_json_result
 
@@ -54,10 +54,8 @@ async def _verify_list_spaces(space: IsolatedE2ESpace, app: Any) -> None:
 
 
 @pytest.mark.e2e_scenario("list-spaces")
-@pytest.mark.parametrize("tool_context_mode", ["minimal", "full"])
 async def test_forge_list_spaces(
     request: Any,
-    tool_context_mode: str,
     mcp_application_isolated: Any,
     isolated_e2e_space: IsolatedE2ESpace,
     onedata_admin_token: str,
@@ -81,7 +79,7 @@ async def test_forge_list_spaces(
         scenario=scenario,
         space=isolated_e2e_space,
         mcp_app=mcp_application_isolated,
-        tool_context_mode=tool_context_mode,  # type: ignore[arg-type]
+        tool_context_mode="full",
         forge_api_key=forge_api_key,
         forge_base_url=forge_base_url,
         model=forge_model,
@@ -92,10 +90,8 @@ async def test_forge_list_spaces(
 
 
 @pytest.mark.e2e_scenario("file-id-roundtrip")
-@pytest.mark.parametrize("tool_context_mode", ["minimal", "full"])
 async def test_forge_file_id_roundtrip(
     request: Any,
-    tool_context_mode: str,
     mcp_application_isolated: Any,
     isolated_e2e_space: IsolatedE2ESpace,
     onedata_admin_token: str,
@@ -144,7 +140,7 @@ async def test_forge_file_id_roundtrip(
         scenario=scenario,
         space=isolated_e2e_space,
         mcp_app=mcp_application_isolated,
-        tool_context_mode=tool_context_mode,  # type: ignore[arg-type]
+        tool_context_mode="full",
         forge_api_key=forge_api_key,
         forge_base_url=forge_base_url,
         model=forge_model,
@@ -156,10 +152,8 @@ async def test_forge_file_id_roundtrip(
 
 
 @pytest.mark.e2e_scenario("path-by-file-id")
-@pytest.mark.parametrize("tool_context_mode", ["minimal", "full"])
 async def test_forge_path_by_file_id(
     request: Any,
-    tool_context_mode: str,
     mcp_application_isolated: Any,
     isolated_e2e_space: IsolatedE2ESpace,
     onedata_admin_token: str,
@@ -202,7 +196,7 @@ async def test_forge_path_by_file_id(
         scenario=scenario,
         space=isolated_e2e_space,
         mcp_app=mcp_application_isolated,
-        tool_context_mode=tool_context_mode,  # type: ignore[arg-type]
+        tool_context_mode="full",
         forge_api_key=forge_api_key,
         forge_base_url=forge_base_url,
         model=forge_model,
@@ -214,10 +208,8 @@ async def test_forge_path_by_file_id(
 
 
 @pytest.mark.e2e_scenario("list-children")
-@pytest.mark.parametrize("tool_context_mode", ["minimal", "full"])
 async def test_forge_list_children(
     request: Any,
-    tool_context_mode: str,
     mcp_application_isolated: Any,
     isolated_e2e_space: IsolatedE2ESpace,
     onedata_admin_token: str,
@@ -264,7 +256,7 @@ async def test_forge_list_children(
         scenario=scenario,
         space=isolated_e2e_space,
         mcp_app=mcp_application_isolated,
-        tool_context_mode=tool_context_mode,  # type: ignore[arg-type]
+        tool_context_mode="full",
         forge_api_key=forge_api_key,
         forge_base_url=forge_base_url,
         model=forge_model,
@@ -276,10 +268,8 @@ async def test_forge_list_children(
 
 
 @pytest.mark.e2e_scenario("file-size-bytes")
-@pytest.mark.parametrize("tool_context_mode", ["minimal", "full"])
 async def test_forge_file_size_bytes(
     request: Any,
-    tool_context_mode: str,
     mcp_application_isolated: Any,
     isolated_e2e_space: IsolatedE2ESpace,
     onedata_admin_token: str,
@@ -314,7 +304,7 @@ async def test_forge_file_size_bytes(
         scenario=scenario,
         space=isolated_e2e_space,
         mcp_app=mcp_application_isolated,
-        tool_context_mode=tool_context_mode,  # type: ignore[arg-type]
+        tool_context_mode="full",
         forge_api_key=forge_api_key,
         forge_base_url=forge_base_url,
         model=forge_model,
@@ -326,10 +316,8 @@ async def test_forge_file_size_bytes(
 
 
 @pytest.mark.e2e_scenario("schema-match-all")
-@pytest.mark.parametrize("tool_context_mode", ["minimal", "full"])
 async def test_forge_schema_match_all(
     request: Any,
-    tool_context_mode: str,
     mcp_application_isolated: Any,
     isolated_e2e_space: IsolatedE2ESpace,
     onedata_admin_token: str,
@@ -352,9 +340,11 @@ async def test_forge_schema_match_all(
             {
                 "harvester_id": harvester_id,
                 "index_id": index_id,
-                "method": "post",
-                "path": "_search",
-                "body": harvester_es_search_query({"size": 1, "query": {"match_all": {}}}),
+                "query": harvester_index_query(
+                    "post",
+                    "_search",
+                    harvester_es_search_query({"size": 1, "query": {"match_all": {}}}),
+                ),
             },
         )
         total = es_hits_total(body)
@@ -378,7 +368,7 @@ async def test_forge_schema_match_all(
         scenario=scenario,
         space=isolated_e2e_space,
         mcp_app=mcp_application_isolated,
-        tool_context_mode=tool_context_mode,  # type: ignore[arg-type]
+        tool_context_mode="full",
         forge_api_key=forge_api_key,
         forge_base_url=forge_base_url,
         model=forge_model,

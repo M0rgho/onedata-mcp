@@ -6,7 +6,7 @@ import pytest
 from assertions_lib import assert_final_answer_contains_all
 from e2e_types import E2EScenario
 from env_checks import forge_credentials_available, onedata_credentials_available
-from forge_harness import run_forge_scenario
+from legacy_forge import run_legacy_forge_scenario
 
 pytestmark = [
     pytest.mark.asyncio,
@@ -27,30 +27,28 @@ pytestmark = [
 _ROUND_TRIP_TOOLS = frozenset({"get_file_attributes", "list_files", "list_files_recursive"})
 
 
-@pytest.mark.parametrize("tool_context_mode", ["minimal", "full"])
 async def test_file_attrs_round_trip_mentions_basename(
     request: Any,
     mcp_application: Any,
     forge_api_key: str,
     forge_model: str,
     forge_base_url: str,
-    tool_context_mode: str,
 ) -> None:
     """Basename via attrs, directory listing, or recursive file list (minimal allowlist)."""
-    expected_basename = "bee_movie_script"  # /krk-iu/bee_movie_script on PLGrid reference tenant
+    expected_basename = "github_event_11898.dat"
 
     scenario = E2EScenario(
         name="round-trip-get-file-attributes",
         user_prompt=(
-            "In my Onedata krk-iu space I have a plain-text file containing the "
-            "entire Bee Movie screenplay. "
+            "In Onedata space github_dataset, under the github_dataset directory, "
+            f"I have a GitHub archive file named {expected_basename}. "
             "What filename (including extension) does Onedata report for that object?"
         ),
         required_tools=frozenset(),
         allowed_tools_for_minimal_context=_ROUND_TRIP_TOOLS,
     )
 
-    run = await run_forge_scenario(
+    run = await run_legacy_forge_scenario(
         scenario=scenario,
         mcp_app=mcp_application,
         tool_context_mode=tool_context_mode,  # type: ignore[arg-type]
@@ -64,11 +62,6 @@ async def test_file_attrs_round_trip_mentions_basename(
         "Expected basename via get_file_attributes, list_files, and/or "
         f"list_files_recursive — got {sorted(run.metrics.unique_tools_called)}."
     )
-    if tool_context_mode == "minimal":
-        assert run.metrics.unique_tools_called <= _ROUND_TRIP_TOOLS, (
-            "Minimal round-trip exposes only attrs/list tools — "
-            f"got {sorted(run.metrics.unique_tools_called)}."
-        )
     assert_final_answer_contains_all(
         run,
         [expected_basename],

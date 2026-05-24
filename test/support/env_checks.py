@@ -14,7 +14,8 @@ from __future__ import annotations
 
 import os
 
-KRK_SPACES = frozenset({"krk-iu", "krk-p"})
+# Back-compat alias; prefer SHARED_REFERENCE_SPACE_NAMES from shared_tenant.
+KRK_SPACES = frozenset({"github_dataset", "krk-p"})
 
 
 def _valid_url(url: str | None) -> bool:

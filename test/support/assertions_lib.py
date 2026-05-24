@@ -1,14 +1,15 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
-from e2e_types import ForgeRunResult
+from e2e_types import ForgeRunResult, ToolCallMetric
 
 if TYPE_CHECKING:
     from e2e_isolated_space import IsolatedE2ESpace
 
-_SHARED_TENANT_SPACE_NAMES = frozenset({"krk-p", "krk-iu", "europeana", "openfoodfacts-images"})
+from shared_tenant import SHARED_TENANT_SPACE_NAMES as _SHARED_TENANT_SPACE_NAMES
+
 _PATH_ARGUMENT_KEYS = (
     "path",
     "parent_id_or_path",
@@ -37,15 +38,49 @@ def assert_forbidden_tools(result: ForgeRunResult) -> None:
     )
 
 
-def assert_isolated_forge_trace(result: ForgeRunResult) -> None:
-    """Standard trace-layer checks for isolated Forge scenarios."""
+def summarize_failed_tool_calls(
+    result: ForgeRunResult | None = None,
+    *,
+    tool_calls: Iterable[ToolCallMetric] | None = None,
+) -> list[dict[str, str | None]]:
+    """Failed MCP invocations (for traces and assertion messages; does not fail the test)."""
 
-    assert_required_tools_and_optional_policy(result)
-    assert_forbidden_tools(result)
-    assert result.metrics.all_tool_calls_ok, (
-        f"MCP tool errors: "
-        f"{[(c.tool_name, c.error) for c in result.metrics.tool_calls if not c.ok]}"
+    calls = (
+        list(tool_calls)
+        if tool_calls is not None
+        else (result.metrics.tool_calls if result is not None else [])
     )
+    return [{"tool_name": call.tool_name, "error": call.error} for call in calls if not call.ok]
+
+
+def _assert_required_tools_successfully_used(result: ForgeRunResult) -> None:
+    """Each required tool must succeed at least once (retries after validation errors are ok)."""
+
+    required = result.scenario.required_tools
+    if not required:
+        return
+    successful = result.metrics.successful_tools_called
+    missing = required - successful
+    assert not missing, (
+        f"Required tools never succeeded: {sorted(missing)} "
+        f"(successful={sorted(successful)}; failed_calls={summarize_failed_tool_calls(result)})"
+    )
+    if result.scenario.require_no_extra_tool_calls:
+        extras = successful - required
+        assert not extras, (
+            f"Unexpected successful tools {sorted(extras)} (scenario forbids extras); "
+            f"failed_calls={summarize_failed_tool_calls(result)}"
+        )
+
+
+def assert_isolated_forge_trace(result: ForgeRunResult) -> None:
+    """Trace checks for isolated Forge: final reply + policy; failed calls are counted only."""
+
+    assert (result.final_assistant_text or "").strip(), (
+        "Expected a non-empty final assistant message"
+    )
+    assert_forbidden_tools(result)
+    _assert_required_tools_successfully_used(result)
 
 
 def assert_tool_arguments_stay_in_isolated_space(
@@ -103,16 +138,21 @@ def assert_tool_arguments_stay_in_isolated_space(
                     raise AssertionError(msg)
 
 
-def assert_required_tools_and_optional_policy(result: ForgeRunResult) -> None:
-    assert result.metrics.required_tools_satisfied, (
-        f"Missing tools {sorted(result.metrics.missing_required_tools)} "
-        f"— called {sorted(result.metrics.unique_tools_called)}"
-    )
-    if result.scenario.require_no_extra_tool_calls:
-        assert not result.metrics.unnecessary_tools_called, (
-            f"Unexpected extras {sorted(result.metrics.unnecessary_tools_called)} "
-            "(scenario forbids them)"
-        )
+def _text_contains_fragment(haystack: str, fragment: str) -> bool:
+    if fragment.lower() in haystack.lower():
+        return True
+    digits = "".join(ch for ch in fragment if ch.isdigit())
+    if digits:
+        normalized = "".join(ch for ch in haystack if ch.isdigit())
+        return digits in normalized
+    return False
+
+
+def _answer_contains_all_fragments(result: ForgeRunResult, fragments: Iterable[str]) -> bool:
+    text = result.final_assistant_text or ""
+    if not text.strip():
+        return False
+    return all(_text_contains_fragment(text, fragment) for fragment in fragments)
 
 
 def assert_final_answer_contains_all(
@@ -125,7 +165,69 @@ def assert_final_answer_contains_all(
 
     text = result.final_assistant_text or ""
     assert text.strip(), "Expected a non-empty final assistant message"
-    haystack = text.lower()
-    missing = [f for f in fragments if f.lower() not in haystack]
+    missing = [f for f in fragments if not _text_contains_fragment(text, f)]
     note = f" {hint}" if hint else ""
     assert not missing, f"Final answer missing {missing!s}.{note} Reply excerpt: {text[:900]!r}"
+
+
+def _assert_any_of_tool_groups(
+    result: ForgeRunResult,
+    any_of: tuple[frozenset[str], ...],
+) -> None:
+    called = result.metrics.unique_tools_called
+    for index, group in enumerate(any_of, start=1):
+        if not (called & group):
+            msg = (
+                f"Expected at least one of {sorted(group)} (group {index}); called {sorted(called)}"
+            )
+            raise AssertionError(msg)
+    if result.scenario.require_no_extra_tool_calls:
+        assert not result.metrics.unnecessary_tools_called, (
+            f"Unexpected extras {sorted(result.metrics.unnecessary_tools_called)} "
+            "(scenario forbids them)"
+        )
+
+
+def assert_required_tools_and_optional_policy(
+    result: ForgeRunResult,
+    *,
+    any_of: tuple[frozenset[str], ...] = (),
+    relax_required_if_answer_contains: Iterable[str] | None = None,
+) -> None:
+    """Enforce ``required_tools`` unless the final answer already matches all fragments.
+
+    When ``relax_required_if_answer_contains`` is set and every fragment appears in
+    ``final_assistant_text``, missing ``required_tools`` does not fail the run (e.g.
+    ``download_file`` instead of ``grep_file_content`` on a README task). ``any_of``
+    groups and ``require_no_extra_tool_calls`` still apply.
+    """
+
+    if relax_required_if_answer_contains and _answer_contains_all_fragments(
+        result, relax_required_if_answer_contains
+    ):
+        _assert_any_of_tool_groups(result, any_of)
+        return
+
+    assert result.metrics.required_tools_satisfied, (
+        f"Missing tools {sorted(result.metrics.missing_required_tools)} "
+        f"— called {sorted(result.metrics.unique_tools_called)}"
+    )
+    _assert_any_of_tool_groups(result, any_of)
+
+
+def assert_forge_scenario_outcome(
+    result: ForgeRunResult,
+    *,
+    answer_fragments: Iterable[str] = (),
+    answer_hint: str = "",
+    any_of: tuple[frozenset[str], ...] = (),
+) -> None:
+    """Post-run checks: optional answer fragments, then tool policy (with relax)."""
+
+    if answer_fragments:
+        assert_final_answer_contains_all(result, answer_fragments, hint=answer_hint)
+    assert_required_tools_and_optional_policy(
+        result,
+        any_of=any_of,
+        relax_required_if_answer_contains=answer_fragments or None,
+    )

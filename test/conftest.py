@@ -24,6 +24,8 @@ from forge_logging import (  # noqa: E402
 )
 from env_checks import onedata_credentials_available  # noqa: E402
 from forge_pytest_integration import LAST_FORGE_RUN  # noqa: E402
+from mcp_write_guard import set_allowed_write_tools, reset_allowed_write_tools  # noqa: E402
+from onedata_mcp.token_policy import WRITE_TOOL_NAMES  # noqa: E402
 
 
 class _SuppressFastMCPValidationExceptionLogs(logging.Filter):
@@ -70,6 +72,34 @@ def pytest_runtest_makereport(item, call):
         return hooked
     patch_forge_trace_test_result(run.trace_path_written, passed=bool(rep.passed))
     return hooked
+
+
+def _is_unit_test_path(path: Path) -> bool:
+    normalized = path.as_posix()
+    return "/test/unit/" in normalized or normalized.endswith("/test/unit")
+
+
+def _write_tools_allowed_for_request(request: pytest.FixtureRequest) -> frozenset[str] | None:
+    """Per-test mutating MCP tool policy. ``None`` disables the guard (unit tests)."""
+
+    if _is_unit_test_path(Path(str(request.fspath))):
+        return None
+    if request.node.get_closest_marker("e2e_isolated_confined_write") is not None:
+        return WRITE_TOOL_NAMES
+    allow_marker = request.node.get_closest_marker("allow_mcp_write_tools")
+    if allow_marker is not None:
+        return frozenset(str(name) for name in allow_marker.args)
+    return frozenset()
+
+
+@pytest.fixture(autouse=True)
+def mcp_write_guard_policy(request: pytest.FixtureRequest):
+    """Block mutating MCP tools unless the test opts in (Forge + integration probes)."""
+
+    allowed = _write_tools_allowed_for_request(request)
+    token = set_allowed_write_tools(allowed)
+    yield
+    reset_allowed_write_tools(token)
 
 
 @pytest.fixture(scope="session")

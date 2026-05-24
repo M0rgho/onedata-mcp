@@ -14,7 +14,7 @@ from isolated_helpers import (
     seed_file,
     wait_for_harvester_hits,
 )
-from onedata_mcp.api.harvesters import harvester_es_search_query
+from onedata_mcp.api.harvesters import harvester_es_search_query, harvester_index_query
 from plgrid_ground_truth import mcp_tool_json_result
 
 HARVESTER_SPACE_GROUP = "harvester"
@@ -96,9 +96,11 @@ async def test_schema_match_all(
         {
             "harvester_id": harvester_id,
             "index_id": index_id,
-            "method": "post",
-            "path": "_search",
-            "body": harvester_es_search_query({"size": 1, "query": {"match_all": {}}}),
+            "query": harvester_index_query(
+                "post",
+                "_search",
+                harvester_es_search_query({"size": 1, "query": {"match_all": {}}}),
+            ),
         },
     )
     total = es_hits_total(body)
@@ -115,9 +117,9 @@ async def test_query_json_twice(
     args = {
         "harvester_id": harvester_id,
         "index_id": index_id,
-        "method": "post",
-        "path": "_search",
-        "body": harvester_es_search_query({"size": 1, "query": {"match_all": {}}}),
+        "query": harvester_index_query(
+            "post", "_search", harvester_es_search_query({"size": 1, "query": {"match_all": {}}})
+        ),
     }
     first = await mcp_tool_json_result(mcp_application_isolated, "query_harvester_index", args)
     second = await mcp_tool_json_result(mcp_application_isolated, "query_harvester_index", args)
@@ -137,13 +139,15 @@ async def test_field_retry_search(
         {
             "harvester_id": harvester_id,
             "index_id": index_id,
-            "method": "post",
-            "path": "_search",
-            "body": harvester_es_search_query(
-                {
-                    "size": 0,
-                    "query": {"term": {"__onedata.nonexistent_field_xyz": "nope"}},
-                }
+            "query": harvester_index_query(
+                "post",
+                "_search",
+                harvester_es_search_query(
+                    {
+                        "size": 0,
+                        "query": {"term": {"__onedata.nonexistent_field_xyz": "nope"}},
+                    }
+                ),
             ),
         },
     )
@@ -156,9 +160,11 @@ async def test_field_retry_search(
         {
             "harvester_id": harvester_id,
             "index_id": index_id,
-            "method": "post",
-            "path": "_search",
-            "body": harvester_es_search_query({"size": 1, "query": {"match_all": {}}}),
+            "query": harvester_index_query(
+                "post",
+                "_search",
+                harvester_es_search_query({"size": 1, "query": {"match_all": {}}}),
+            ),
         },
     )
     ok_total = es_hits_total(ok)

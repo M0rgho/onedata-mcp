@@ -23,6 +23,7 @@ class E2EScenario:
     max_tool_rounds: int = 8
     require_no_extra_tool_calls: bool = False
     forbidden_tools: frozenset[str] = frozenset()
+    allowed_write_tools: frozenset[str] = frozenset()
 
     def __post_init__(self) -> None:
         if not self.required_tools.issubset(self.allowed_tools_for_minimal_context):
@@ -74,13 +75,19 @@ class RunMetrics:
     def all_tool_calls_ok(self) -> bool:
         return all(call.ok for call in self.tool_calls)
 
+    @property
+    def successful_tools_called(self) -> frozenset[str]:
+        return frozenset(c.tool_name for c in self.tool_calls if c.ok)
+
     def tool_calls_echo_counts(self) -> dict[str, int]:
         """Totals for forge trace ``metrics_echo`` (MCP dispatch, one row per invocation)."""
 
         calls = self.tool_calls
+        failed = sum(1 for c in calls if not c.ok)
         return {
             "tool_calls_total": len(calls),
-            "tool_calls_successful": sum(1 for c in calls if c.ok),
+            "tool_calls_successful": len(calls) - failed,
+            "tool_calls_failed": failed,
         }
 
 

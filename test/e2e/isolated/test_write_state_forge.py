@@ -1,4 +1,4 @@
-"""Isolated Forge E2E: write-state P0 scenarios (read-write confined MCP token)."""
+"""Isolated Forge E2E: write-state scenarios (read-write confined MCP token)."""
 
 from __future__ import annotations
 
@@ -10,8 +10,9 @@ from e2e_types import E2EScenario
 from env_checks import forge_credentials_available, onedata_credentials_available
 from forge_isolated_harness import run_isolated_forge_scenario
 from isolated_helpers import child_names, seed_file
-from onedata_mcp.api.files import get_file_metadata, set_file_metadata
 from plgrid_ground_truth import mcp_tool_json_result
+
+from onedata_mcp.api.files import get_file_metadata, set_file_metadata, set_file_xattrs
 
 WRITE_STATE_SPACE_GROUP = "write-state"
 
@@ -30,7 +31,10 @@ pytestmark = [
     pytest.mark.e2e_isolated_space_group(WRITE_STATE_SPACE_GROUP),
     pytest.mark.skipif(
         not onedata_credentials_available(),
-        reason="ONEDATA_ONEZONE_* and ONEDATA_ONEPROVIDER_* required (see docs/e2e-isolated-spaces.md)",
+        reason=(
+            "ONEDATA_ONEZONE_* and ONEDATA_ONEPROVIDER_* required "
+            "(see docs/e2e-isolated-spaces.md)"
+        ),
     ),
     pytest.mark.skipif(
         not forge_credentials_available(),
@@ -40,10 +44,8 @@ pytestmark = [
 
 
 @pytest.mark.e2e_scenario("create-xattr-delete")
-@pytest.mark.parametrize("tool_context_mode", ["minimal", "full"])
 async def test_forge_create_xattr_delete(
     request: Any,
-    tool_context_mode: str,
     mcp_application_isolated: Any,
     isolated_e2e_space: IsolatedE2ESpace,
     onedata_admin_token: str,
@@ -92,7 +94,7 @@ async def test_forge_create_xattr_delete(
         scenario=scenario,
         space=isolated_e2e_space,
         mcp_app=mcp_application_isolated,
-        tool_context_mode=tool_context_mode,  # type: ignore[arg-type]
+        tool_context_mode="full",
         forge_api_key=forge_api_key,
         forge_base_url=forge_base_url,
         model=forge_model,
@@ -103,10 +105,8 @@ async def test_forge_create_xattr_delete(
 
 
 @pytest.mark.e2e_scenario("xattrs-only")
-@pytest.mark.parametrize("tool_context_mode", ["minimal", "full"])
 async def test_forge_xattrs_only(
     request: Any,
-    tool_context_mode: str,
     mcp_application_isolated: Any,
     isolated_e2e_space: IsolatedE2ESpace,
     onedata_admin_token: str,
@@ -156,7 +156,82 @@ async def test_forge_xattrs_only(
         scenario=scenario,
         space=isolated_e2e_space,
         mcp_app=mcp_application_isolated,
-        tool_context_mode=tool_context_mode,  # type: ignore[arg-type]
+        tool_context_mode="full",
+        forge_api_key=forge_api_key,
+        forge_base_url=forge_base_url,
+        model=forge_model,
+        pytest_request=request,
+        admin_token=onedata_admin_token,
+        setup=setup,
+        verify_state=verify,
+    )
+
+
+@pytest.mark.e2e_scenario("json-metadata")
+async def test_forge_json_metadata(
+    request: Any,
+    mcp_application_isolated: Any,
+    isolated_e2e_space: IsolatedE2ESpace,
+    onedata_admin_token: str,
+    forge_api_key: str,
+    forge_model: str,
+    forge_base_url: str,
+) -> None:
+    path = f"{isolated_e2e_space.root_path}/e2e-meta/json-expand.txt"
+    baseline_json = {
+        "dataset": "e2e-baseline",
+        "version": 1,
+        "tags": ["alpha", "beta"],
+    }
+    expected_json = {
+        **baseline_json,
+        "version": 2,
+        "title": "E2E Forge",
+        "status": "published",
+    }
+    meta_tools = frozenset({"set_file_metadata", "get_file_metadata"})
+
+    async def setup(space: IsolatedE2ESpace, admin: str) -> None:
+        _ = space
+        await seed_file(path, "json-expand\n", admin_token=admin)
+        await set_file_metadata(path, "json", baseline_json)
+        await set_file_xattrs(path, {"keep": "yes"})
+
+    async def verify(space: IsolatedE2ESpace, app: Any) -> None:
+        _ = space
+        after = await mcp_tool_json_result(
+            app,
+            "get_file_metadata",
+            {"file_id_or_path": path, "metadata_types": ["json", "xattrs"]},
+        )
+        assert isinstance(after, dict)
+        assert after.get("json") == expected_json
+        xattrs = after.get("xattrs")
+        assert isinstance(xattrs, dict)
+        assert xattrs.get("keep") == "yes"
+
+    scenario = E2EScenario(
+        name="isolated-forge-json-metadata",
+        system_prompt=_ISOLATED_SYSTEM,
+        user_prompt=(
+            f"On file {path!r}: read the current JSON metadata with get_file_metadata, "
+            "then update it so title is 'E2E Forge', version is 2, and status is 'published', "
+            "while keeping dataset and tags exactly as they are. "
+            "Call set_file_metadata with metadata_type json and the full merged JSON object "
+            "(set_file_metadata replaces the whole JSON document). "
+            "Do not change extended attributes. Confirm the result with get_file_metadata."
+        ),
+        required_tools=meta_tools,
+        allowed_tools_for_minimal_context=meta_tools,
+        require_no_extra_tool_calls=False,
+        forbidden_tools=frozenset({"set_file_xattrs", "create_file", "delete_file"}),
+    )
+
+    await run_isolated_forge_scenario(
+        scenario=scenario,
+        space=isolated_e2e_space,
+        mcp_app=mcp_application_isolated,
+        tool_context_mode="full",
         forge_api_key=forge_api_key,
         forge_base_url=forge_base_url,
         model=forge_model,

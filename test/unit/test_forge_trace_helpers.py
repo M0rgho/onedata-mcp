@@ -192,7 +192,9 @@ def test_run_metrics_tool_calls_echo_counts() -> None:
     assert m.tool_calls_echo_counts() == {
         "tool_calls_total": 3,
         "tool_calls_successful": 2,
+        "tool_calls_failed": 1,
     }
+    assert m.successful_tools_called == frozenset({"a", "c"})
 
 
 def test_explicit_file_flag(monkeypatch) -> None:

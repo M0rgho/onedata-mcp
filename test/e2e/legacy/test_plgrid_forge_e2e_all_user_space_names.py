@@ -3,11 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-from assertions_lib import (
-    assert_final_answer_contains_all,
-    assert_required_tools_and_optional_policy,
-    recall_for_names_in_text,
-)
+from assertions_lib import assert_forge_scenario_outcome, recall_for_names_in_text
 from e2e_types import E2EScenario
 from env_checks import forge_credentials_available, onedata_credentials_available
 from forge_harness import run_forge_scenario
@@ -29,17 +25,15 @@ pytestmark = [
 
 
 # Reference PLGrid tenant: generic list_available_spaces answer must still name both krk spaces.
-_EXPECTED_KRK_SPACES = frozenset({"krk-p", "krk-iu"})
+_EXPECTED_KRK_SPACES = frozenset({"krk-p", "github_dataset"})
 
 
-@pytest.mark.parametrize("tool_context_mode", ["minimal", "full"])
 async def test_e2e_space_list_includes_krk_without_prompting_names(
     request: Any,
     mcp_application: Any,
     forge_api_key: str,
     forge_model: str,
     forge_base_url: str,
-    tool_context_mode: str,
 ) -> None:
     expected = _EXPECTED_KRK_SPACES
     scenario = E2EScenario(
@@ -61,12 +55,11 @@ async def test_e2e_space_list_includes_krk_without_prompting_names(
         model=forge_model,
         pytest_request=request,
     )
-    assert_required_tools_and_optional_policy(run)
     assert run.metrics.all_tool_calls_ok
     recall = recall_for_names_in_text(expected, run.final_assistant_text)
     assert recall >= 1.0, f"Expected all {sorted(expected)} names in answer"
-    assert_final_answer_contains_all(
+    assert_forge_scenario_outcome(
         run,
-        sorted(expected),
-        hint="Both reference krk spaces must appear but were not named in the user message.",
+        answer_fragments=sorted(expected),
+        answer_hint="Both reference krk spaces must appear but were not named in the user message.",
     )

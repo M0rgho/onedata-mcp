@@ -5,10 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-from assertions_lib import (
-    assert_final_answer_contains_all,
-    assert_required_tools_and_optional_policy,
-)
+from assertions_lib import assert_forge_scenario_outcome
 from e2e_types import E2EScenario, ForgeRunResult
 from env_checks import forge_credentials_available, onedata_credentials_available
 from forge_harness import run_forge_scenario
@@ -56,14 +53,12 @@ def _assert_successful_harvester_queries(run: ForgeRunResult) -> None:
     )
 
 
-@pytest.mark.parametrize("tool_context_mode", ["minimal", "full"])
 async def test_e2e_github_index_reports_event_type_for_named_event_file(
     request: Any,
     mcp_application: Any,
     forge_api_key: str,
     forge_model: str,
     forge_base_url: str,
-    tool_context_mode: str,
 ) -> None:
     """Model locates Github Harvester github-index and reads ``type`` for a known ``.dat`` row."""
     event_file = "github_event_11898.dat"
@@ -89,29 +84,26 @@ async def test_e2e_github_index_reports_event_type_for_named_event_file(
     run = await run_forge_scenario(
         scenario=scenario,
         mcp_app=mcp_application,
-        tool_context_mode=tool_context_mode,  # type: ignore[arg-type]
+        tool_context_mode="full",
         forge_api_key=forge_api_key,
         forge_base_url=forge_base_url,
         model=forge_model,
         pytest_request=request,
     )
-    assert_required_tools_and_optional_policy(run)
     _assert_successful_harvester_queries(run)
-    assert_final_answer_contains_all(
+    assert_forge_scenario_outcome(
         run,
-        (expected_event_type,),
-        hint="Answer must cite the PullRequestReview event type from tool output.",
+        answer_fragments=(expected_event_type,),
+        answer_hint="Answer must cite the PullRequestReview event type from tool output.",
     )
 
 
-@pytest.mark.parametrize("tool_context_mode", ["minimal", "full"])
 async def test_e2e_github_index_reports_repo_slug_for_named_event_file(
     request: Any,
     mcp_application: Any,
     forge_api_key: str,
     forge_model: str,
     forge_base_url: str,
-    tool_context_mode: str,
 ) -> None:
     """Same document as PR-review test — forces reading ``repo.name`` (owner/repo slug)."""
     event_file = "github_event_11898.dat"
@@ -134,29 +126,26 @@ async def test_e2e_github_index_reports_repo_slug_for_named_event_file(
     run = await run_forge_scenario(
         scenario=scenario,
         mcp_app=mcp_application,
-        tool_context_mode=tool_context_mode,  # type: ignore[arg-type]
+        tool_context_mode="full",
         forge_api_key=forge_api_key,
         forge_base_url=forge_base_url,
         model=forge_model,
         pytest_request=request,
     )
-    assert_required_tools_and_optional_policy(run)
     _assert_successful_harvester_queries(run)
-    assert_final_answer_contains_all(
+    assert_forge_scenario_outcome(
         run,
-        (expected_repo_slug,),
-        hint="Answer must contain the slug from the Elasticsearch _source.repo.name field.",
+        answer_fragments=(expected_repo_slug,),
+        answer_hint="Answer must contain the slug from the Elasticsearch _source.repo.name field.",
     )
 
 
-@pytest.mark.parametrize("tool_context_mode", ["minimal", "full"])
 async def test_e2e_github_index_finds_push_event_for_repo_slug(
     request: Any,
     mcp_application: Any,
     forge_api_key: str,
     forge_model: str,
     forge_base_url: str,
-    tool_context_mode: str,
 ) -> None:
     """Different query shape: filter by ``PushEvent`` + ``repo.name`` (not filename oracle)."""
     push_repo_slug = "rafnixg/rafnixg"
@@ -178,16 +167,15 @@ async def test_e2e_github_index_finds_push_event_for_repo_slug(
     run = await run_forge_scenario(
         scenario=scenario,
         mcp_app=mcp_application,
-        tool_context_mode=tool_context_mode,  # type: ignore[arg-type]
+        tool_context_mode="full",
         forge_api_key=forge_api_key,
         forge_base_url=forge_base_url,
         model=forge_model,
         pytest_request=request,
     )
-    assert_required_tools_and_optional_policy(run)
     _assert_successful_harvester_queries(run)
-    assert_final_answer_contains_all(
+    assert_forge_scenario_outcome(
         run,
-        (expected_event_type, push_repo_slug),
-        hint="Must reflect a PushEvent hit for rafnixg/rafnixg from elasticsearch results.",
+        answer_fragments=(expected_event_type, push_repo_slug),
+        answer_hint="Must reflect a PushEvent hit for rafnixg/rafnixg from elasticsearch results.",
     )

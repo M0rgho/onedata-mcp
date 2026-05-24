@@ -197,7 +197,9 @@ async def test_query_harvester_index_posts_query_body(
         json={"hits": {"total": 1, "hits": [{"_id": "resource_id"}]}},
     )
 
-    result = await harvesters.query_harvester_index("h1", "idx1", "get", "resource_id")
+    result = await harvesters.query_harvester_index(
+        "h1", "idx1", harvesters.harvester_index_query("get", "resource_id")
+    )
 
     assert result["hits"]["total"] == 1
     req = httpx_mock.get_requests()[0]
@@ -218,7 +220,9 @@ async def test_query_harvester_index_post_search_serializes_body(
     )
 
     es_body = harvesters.harvester_es_search_query({"size": 1, "query": {"match_all": {}}})
-    result = await harvesters.query_harvester_index("h1", "idx1", "post", "_search", es_body)
+    result = await harvesters.query_harvester_index(
+        "h1", "idx1", harvesters.harvester_index_query("post", "_search", es_body)
+    )
 
     assert result["hits"]["total"] == 1
     req = httpx_mock.get_requests()[0]
@@ -254,3 +258,16 @@ def test_unwrap_harvester_query_response_parses_body_string() -> None:
 def test_harvester_es_search_query_returns_body() -> None:
     es_body = {"size": 1, "query": {"match_all": {}}}
     assert harvesters.harvester_es_search_query(es_body) is es_body
+
+
+def test_harvester_index_query_builds_nested_object() -> None:
+    es_body = {"size": 1, "query": {"match_all": {}}}
+    assert harvesters.harvester_index_query("post", "_search", es_body) == {
+        "method": "post",
+        "path": "_search",
+        "body": es_body,
+    }
+    assert harvesters.harvester_index_query("get", "_mapping") == {
+        "method": "get",
+        "path": "_mapping",
+    }
