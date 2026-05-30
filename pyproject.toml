@@ -22,6 +22,7 @@ dev = [
     "matplotlib>=3.10.9",
     "mcp[cli]>=1.27.0",
     "openai>=1.88.0",
+    "pygount>=3.2.0",
     "pytest>=8.4.2",
     "pytest-asyncio>=1.2.0",
     "pytest-httpx>=0.35.0",
@@ -42,6 +43,8 @@ indent-style = "space"
 
 [tool.basedpyright]
 reportUnusedFunction = "none"
+# Mirror test/conftest.py sys.path so support modules resolve (isolated_helpers, etc.).
+extraPaths = ["test/support"]
 
 [tool.pytest.ini_options]
 # Single-process only: avoid pytest-xdist multi-worker runs even if installed globally / in tooling.
@@ -58,4 +61,6 @@ markers = [
     "e2e_isolated_confined_write: use read-write confined token for MCP (default is data.readonly)",
     'e2e_scenario(id): isolated scenario id from docs/onedata-mcp-e2e-test-scenarios.md (e.g. "list-spaces")',
     "legacy: shared-space Forge E2E under test/e2e/legacy (excluded from default pytest)",
+    "allow_mcp_write_tools(tool,...): allow listed mutating MCP tools (create_file, delete_file, set_file_xattrs, set_file_metadata)",
+    "shared_tenant: read-only integration tests on shared PLGrid spaces (github_dataset, europeana, ...)",
 ]
