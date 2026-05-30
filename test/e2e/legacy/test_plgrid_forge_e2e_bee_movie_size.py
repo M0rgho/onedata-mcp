@@ -45,12 +45,10 @@ async def test_e2e_reports_bee_movie_size(
             "Return the size in bytes without any formatting."
         ),
         required_tools=frozenset(),
-        allowed_tools_for_minimal_context=_BEE_MOVIE_SIZE_TOOLS,
     )
     run = await run_forge_scenario(
         scenario=scenario,
         mcp_app=mcp_application,
-        tool_context_mode="full",
         forge_api_key=forge_api_key,
         forge_base_url=forge_base_url,
         model=forge_model,

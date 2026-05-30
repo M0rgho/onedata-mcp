@@ -46,13 +46,11 @@ async def test_e2e_lists_known_github_event_basename(
             "Reply with the basenames you see, comma-separated."
         ),
         required_tools=frozenset({"list_files"}),
-        allowed_tools_for_minimal_context=_LIST_TOOLS,
         require_no_extra_tool_calls=True,
     )
     run = await run_legacy_forge_scenario(
         scenario=scenario,
         mcp_app=mcp_application,
-        tool_context_mode="full",
         forge_api_key=forge_api_key,
         forge_base_url=forge_base_url,
         model=forge_model,

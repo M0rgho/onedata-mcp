@@ -54,14 +54,12 @@ async def test_harvesters_full_suite_parametrized(
             "Summarise the notable fields or values in the response."
         ),
         required_tools=frozenset({"get_harvester_index_schema", "query_harvester_index"}),
-        allowed_tools_for_minimal_context=HARVESTER_SUITE,
         max_tokens=4096,
         max_tool_rounds=22,
     )
     full_or_minimal = await run_forge_scenario(
         scenario=scenario,
         mcp_app=mcp_application,
-        tool_context_mode="full",
         forge_api_key=forge_api_key,
         forge_base_url=forge_base_url,
         model=forge_model,

@@ -10,8 +10,9 @@ from e2e_isolated_space import IsolatedE2ESpace
 from e2e_oracles import assert_list_spaces_oracle, assert_paths_under_prefix
 from env_checks import onedata_credentials_available
 from isolated_helpers import child_names, recursive_paths, seed_file
-from onedata_mcp.api.spaces import list_available_spaces
 from plgrid_ground_truth import ground_truth_file_size_bytes, mcp_tool_json_result
+
+from onedata_mcp.api.spaces import list_available_spaces
 
 READ_STATE_SPACE_GROUP = "read-state"
 

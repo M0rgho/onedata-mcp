@@ -226,7 +226,6 @@ def _flatten_trace_summary_row(
         "final_finish_reason": data.get("final_finish_reason", ""),
         "effective_model_id": data.get("effective_model_id", ""),
         "forge_base_url_host_only": data.get("forge_base_url_host_only", ""),
-        "scenario_tool_context_mode": scenario.get("tool_context_mode", ""),
         "scenario_temperature": scenario.get("temperature", ""),
         "scenario_max_tokens_cap": scenario.get("max_tokens_cap", ""),
         "scenario_max_tool_rounds_cap": scenario.get("max_tool_rounds_cap", ""),

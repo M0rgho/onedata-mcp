@@ -6,7 +6,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 from assertions_lib import assert_forbidden_tools
-from e2e_types import E2EScenario, ForgeRunResult, ToolContextMode
+from e2e_types import E2EScenario, ForgeRunResult
 from fastmcp import FastMCP
 from forge_harness import run_forge_scenario
 from shared_tenant import shared_readonly_scenario
@@ -18,7 +18,6 @@ async def run_legacy_forge_scenario(
     *,
     scenario: E2EScenario,
     mcp_app: FastMCP,
-    tool_context_mode: ToolContextMode,
     forge_api_key: str,
     forge_base_url: str,
     model: str,
@@ -30,7 +29,6 @@ async def run_legacy_forge_scenario(
         name=scenario.name,
         user_prompt=scenario.user_prompt,
         required_tools=scenario.required_tools,
-        allowed_tools_for_minimal_context=scenario.allowed_tools_for_minimal_context,
         model=scenario.model,
         system_prompt=scenario.system_prompt,
         temperature=scenario.temperature,
@@ -43,7 +41,6 @@ async def run_legacy_forge_scenario(
     run = await run_forge_scenario(
         scenario=readonly,
         mcp_app=mcp_app,
-        tool_context_mode=tool_context_mode,
         forge_api_key=forge_api_key,
         forge_base_url=forge_base_url,
         model=model,
@@ -57,7 +54,6 @@ async def run_shared_forge_scenario(
     *,
     scenario: E2EScenario,
     mcp_app: FastMCP,
-    tool_context_mode: ToolContextMode,
     forge_api_key: str,
     forge_base_url: str,
     model: str,
@@ -75,7 +71,6 @@ async def run_shared_forge_scenario(
     run = await run_legacy_forge_scenario(
         scenario=scenario,
         mcp_app=mcp_app,
-        tool_context_mode=tool_context_mode,
         forge_api_key=forge_api_key,
         forge_base_url=forge_base_url,
         model=model,

@@ -40,12 +40,10 @@ async def test_e2e_live_lists_spaces_and_names_krk_p_or_iu(
             "Please list each space name you can see so I know what's on my account."
         ),
         required_tools=frozenset({"list_available_spaces"}),
-        allowed_tools_for_minimal_context=frozenset({"list_available_spaces"}),
     )
     run = await run_forge_scenario(
         scenario=scenario,
         mcp_app=mcp_application,
-        tool_context_mode=tool_context_mode,  # type: ignore[arg-type]
         forge_api_key=forge_api_key,
         forge_base_url=forge_base_url,
         model=forge_model,

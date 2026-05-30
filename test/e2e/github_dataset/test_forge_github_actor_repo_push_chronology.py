@@ -18,7 +18,6 @@ from github_forge_e2e import (
     GITHUB_FORGE_MAX_TOKENS,
     GITHUB_FORGE_PYTESTMARK,
     GITHUB_FORGE_USER_SYSTEM,
-    HARVESTER_TOOLS,
     assert_successful_harvester_queries,
 )
 from legacy_forge import run_shared_forge_scenario
@@ -72,14 +71,12 @@ async def test_forge_github_actor_repo_push_chronology(
             "List both pairs clearly."
         ),
         required_tools=frozenset({"query_harvester_index"}),
-        allowed_tools_for_minimal_context=HARVESTER_TOOLS,
         max_tokens=GITHUB_FORGE_MAX_TOKENS,
         max_tool_rounds=GITHUB_FORGE_HARD_MAX_TOOL_ROUNDS,
     )
     run = await run_shared_forge_scenario(
         scenario=scenario,
         mcp_app=mcp_application,
-        tool_context_mode="full",
         forge_api_key=forge_api_key,
         forge_base_url=forge_base_url,
         model=forge_model,

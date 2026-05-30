@@ -22,7 +22,7 @@ from plgrid_ground_truth import ground_truth_file_size_bytes, mcp_tool_json_resu
 
 READ_STATE_SPACE_GROUP = "read-state"
 
-_ISOLATED_SYSTEM = (
+_ISOLATED_SYSTEM_PROMPT = (
     "You are a careful assistant with Onedata MCP tools. Use tools for factual answers "
     "about the connected Oneprovider. Do not invent space names, paths, or file ids."
 )
@@ -65,13 +65,9 @@ async def test_forge_list_spaces(
 ) -> None:
     scenario = E2EScenario(
         name="isolated-forge-list-spaces",
-        system_prompt=_ISOLATED_SYSTEM,
-        user_prompt=(
-            "List every Onedata space name available on this Oneprovider. "
-            "Use the list_available_spaces tool."
-        ),
+        system_prompt=_ISOLATED_SYSTEM_PROMPT,
+        user_prompt="List every Onedata space name available on this Oneprovider.",
         required_tools=frozenset({"list_available_spaces"}),
-        allowed_tools_for_minimal_context=frozenset({"list_available_spaces"}),
         require_no_extra_tool_calls=True,
         forbidden_tools=frozenset({"list_files", "get_file_id", "create_file"}),
     )
@@ -79,7 +75,6 @@ async def test_forge_list_spaces(
         scenario=scenario,
         space=isolated_e2e_space,
         mcp_app=mcp_application_isolated,
-        tool_context_mode="full",
         forge_api_key=forge_api_key,
         forge_base_url=forge_base_url,
         model=forge_model,
@@ -126,13 +121,12 @@ async def test_forge_file_id_roundtrip(
 
     scenario = E2EScenario(
         name="isolated-forge-file-id-roundtrip",
-        system_prompt=_ISOLATED_SYSTEM,
+        system_prompt=_ISOLATED_SYSTEM_PROMPT,
         user_prompt=(
-            f"For path {logical_path!r}: call get_file_id, then get_file_attributes "
+            f"Find {logical_path!r} call get_file_id, then get_file_attributes "
             "using only the returned file id (include fileId, name, and path attributes)."
         ),
-        required_tools=frozenset({"get_file_id", "get_file_attributes"}),
-        allowed_tools_for_minimal_context=frozenset({"get_file_id", "get_file_attributes"}),
+        required_tools=frozenset[str]({"get_file_id", "get_file_attributes"}),
         require_no_extra_tool_calls=True,
     )
 
@@ -140,7 +134,6 @@ async def test_forge_file_id_roundtrip(
         scenario=scenario,
         space=isolated_e2e_space,
         mcp_app=mcp_application_isolated,
-        tool_context_mode="full",
         forge_api_key=forge_api_key,
         forge_base_url=forge_base_url,
         model=forge_model,
@@ -182,13 +175,12 @@ async def test_forge_path_by_file_id(
 
     scenario = E2EScenario(
         name="isolated-forge-path-by-file-id",
-        system_prompt=_ISOLATED_SYSTEM,
+        system_prompt=_ISOLATED_SYSTEM_PROMPT,
         user_prompt=(
             f"Resolve the file id for {logical_path!r}, then call get_file_attributes "
             "on that id only and report the path field."
         ),
         required_tools=frozenset({"get_file_id", "get_file_attributes"}),
-        allowed_tools_for_minimal_context=frozenset({"get_file_id", "get_file_attributes"}),
         require_no_extra_tool_calls=True,
     )
 
@@ -196,7 +188,6 @@ async def test_forge_path_by_file_id(
         scenario=scenario,
         space=isolated_e2e_space,
         mcp_app=mcp_application_isolated,
-        tool_context_mode="full",
         forge_api_key=forge_api_key,
         forge_base_url=forge_base_url,
         model=forge_model,
@@ -242,13 +233,12 @@ async def test_forge_list_children(
 
     scenario = E2EScenario(
         name="isolated-forge-list-children",
-        system_prompt=_ISOLATED_SYSTEM,
+        system_prompt=_ISOLATED_SYSTEM_PROMPT,
         user_prompt=(
             f"Under parent path {parent_path!r}, list children (one level) and confirm "
             f"{child_basename!r} is present. Use list_files."
         ),
         required_tools=frozenset({"list_files"}),
-        allowed_tools_for_minimal_context=frozenset({"list_files"}),
         require_no_extra_tool_calls=True,
     )
 
@@ -256,7 +246,6 @@ async def test_forge_list_children(
         scenario=scenario,
         space=isolated_e2e_space,
         mcp_app=mcp_application_isolated,
-        tool_context_mode="full",
         forge_api_key=forge_api_key,
         forge_base_url=forge_base_url,
         model=forge_model,
@@ -300,14 +289,13 @@ async def test_forge_grep_multi_file(
 
     scenario = E2EScenario(
         name="isolated-forge-grep-multi-file",
-        system_prompt=_ISOLATED_SYSTEM,
+        system_prompt=_ISOLATED_SYSTEM_PROMPT,
         user_prompt=(
             f"Under {parent!r} there are three text files: plain-a.txt, {target_basename}, "
             f"and plain-b.txt. Use grep_file_content to find which file contains the literal "
             f"{needle!r} and report its basename."
         ),
         required_tools=frozenset({"grep_file_content"}),
-        allowed_tools_for_minimal_context=frozenset({"grep_file_content"}),
         require_no_extra_tool_calls=False,
         forbidden_tools=frozenset({"download_file", "create_file"}),
     )
@@ -316,7 +304,6 @@ async def test_forge_grep_multi_file(
         scenario=scenario,
         space=isolated_e2e_space,
         mcp_app=mcp_application_isolated,
-        tool_context_mode="full",
         forge_api_key=forge_api_key,
         forge_base_url=forge_base_url,
         model=forge_model,
@@ -349,13 +336,12 @@ async def test_forge_file_size_bytes(
 
     scenario = E2EScenario(
         name="isolated-forge-file-size-bytes",
-        system_prompt=_ISOLATED_SYSTEM,
+        system_prompt=_ISOLATED_SYSTEM_PROMPT,
         user_prompt=(
             f"What is the size in bytes of {logical_path!r}? "
             "Use get_file_attributes and return only the number."
         ),
         required_tools=frozenset({"get_file_attributes"}),
-        allowed_tools_for_minimal_context=frozenset({"get_file_attributes"}),
         require_no_extra_tool_calls=True,
         forbidden_tools=frozenset({"grep_file_content", "download_file"}),
     )
@@ -364,7 +350,6 @@ async def test_forge_file_size_bytes(
         scenario=scenario,
         space=isolated_e2e_space,
         mcp_app=mcp_application_isolated,
-        tool_context_mode="full",
         forge_api_key=forge_api_key,
         forge_base_url=forge_base_url,
         model=forge_model,
@@ -412,15 +397,12 @@ async def test_forge_schema_match_all(
 
     scenario = E2EScenario(
         name="isolated-forge-schema-match-all",
-        system_prompt=_ISOLATED_SYSTEM,
+        system_prompt=_ISOLATED_SYSTEM_PROMPT,
         user_prompt=(
             f"On harvester {harvester_id!r} index {index_id!r}: load the index schema, "
             "then run a match_all query with size=1."
         ),
         required_tools=frozenset({"get_harvester_index_schema", "query_harvester_index"}),
-        allowed_tools_for_minimal_context=frozenset(
-            {"get_harvester_index_schema", "query_harvester_index"}
-        ),
         require_no_extra_tool_calls=False,
     )
 
@@ -428,7 +410,6 @@ async def test_forge_schema_match_all(
         scenario=scenario,
         space=isolated_e2e_space,
         mcp_app=mcp_application_isolated,
-        tool_context_mode="full",
         forge_api_key=forge_api_key,
         forge_base_url=forge_base_url,
         model=forge_model,

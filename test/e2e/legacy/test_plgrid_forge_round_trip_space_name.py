@@ -40,14 +40,12 @@ async def test_round_trip_mentions_live_space_names(
             "that comes back? I need the names spelled exactly as returned."
         ),
         required_tools=frozenset({"list_available_spaces"}),
-        allowed_tools_for_minimal_context=frozenset({"list_available_spaces"}),
         max_tokens=4096,
     )
 
     run = await run_forge_scenario(
         scenario=scenario,
         mcp_app=mcp_application,
-        tool_context_mode=tool_context_mode,  # type: ignore[arg-type]
         forge_api_key=forge_api_key,
         forge_base_url=forge_base_url,
         model=forge_model,

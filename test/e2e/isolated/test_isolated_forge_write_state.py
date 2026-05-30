@@ -85,7 +85,6 @@ async def test_forge_create_xattr_delete(
             "get_file_metadata (xattrs only), then delete the file and list the parent again."
         ),
         required_tools=write_tools,
-        allowed_tools_for_minimal_context=write_tools,
         require_no_extra_tool_calls=False,
     )
 
@@ -93,7 +92,6 @@ async def test_forge_create_xattr_delete(
         scenario=scenario,
         space=isolated_e2e_space,
         mcp_app=mcp_application_isolated,
-        tool_context_mode="full",
         forge_api_key=forge_api_key,
         forge_base_url=forge_base_url,
         model=forge_model,
@@ -114,8 +112,8 @@ async def test_forge_create_nested(
     forge_base_url: str,
 ) -> None:
     nested_path = f"{isolated_e2e_space.root_path}/deep/new-dir/leaf.txt"
-    expected_content = "forge-nested-leaf\n"
-    write_tools = frozenset({"create_file", "download_file", "get_file_id"})
+    expected_content = "forge-nested-leaf"
+    write_tools = frozenset({"create_file", "download_file"})
 
     async def verify(space: IsolatedE2ESpace, app: Any) -> None:
         _ = space
@@ -142,7 +140,6 @@ async def test_forge_create_nested(
             "Then download the file and confirm the bytes match what you wrote."
         ),
         required_tools=write_tools,
-        allowed_tools_for_minimal_context=write_tools,
         require_no_extra_tool_calls=False,
     )
 
@@ -150,7 +147,6 @@ async def test_forge_create_nested(
         scenario=scenario,
         space=isolated_e2e_space,
         mcp_app=mcp_application_isolated,
-        tool_context_mode="full",
         forge_api_key=forge_api_key,
         forge_base_url=forge_base_url,
         model=forge_model,
@@ -203,7 +199,6 @@ async def test_forge_xattrs_only(
             "Do not change JSON or RDF metadata. Confirm with get_file_metadata."
         ),
         required_tools=meta_tools,
-        allowed_tools_for_minimal_context=meta_tools,
         require_no_extra_tool_calls=False,
         forbidden_tools=frozenset({"set_file_metadata", "delete_file", "create_file"}),
     )
@@ -212,7 +207,6 @@ async def test_forge_xattrs_only(
         scenario=scenario,
         space=isolated_e2e_space,
         mcp_app=mcp_application_isolated,
-        tool_context_mode="full",
         forge_api_key=forge_api_key,
         forge_base_url=forge_base_url,
         model=forge_model,
@@ -278,7 +272,6 @@ async def test_forge_json_metadata(
             "Do not change extended attributes. Confirm the result with get_file_metadata."
         ),
         required_tools=meta_tools,
-        allowed_tools_for_minimal_context=meta_tools,
         require_no_extra_tool_calls=False,
         forbidden_tools=frozenset({"set_file_xattrs", "create_file", "delete_file"}),
     )
@@ -287,7 +280,6 @@ async def test_forge_json_metadata(
         scenario=scenario,
         space=isolated_e2e_space,
         mcp_app=mcp_application_isolated,
-        tool_context_mode="full",
         forge_api_key=forge_api_key,
         forge_base_url=forge_base_url,
         model=forge_model,

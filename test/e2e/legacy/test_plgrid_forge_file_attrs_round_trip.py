@@ -45,13 +45,11 @@ async def test_file_attrs_round_trip_mentions_basename(
             "What filename (including extension) does Onedata report for that object?"
         ),
         required_tools=frozenset(),
-        allowed_tools_for_minimal_context=_ROUND_TRIP_TOOLS,
     )
 
     run = await run_legacy_forge_scenario(
         scenario=scenario,
         mcp_app=mcp_application,
-        tool_context_mode=tool_context_mode,  # type: ignore[arg-type]
         forge_api_key=forge_api_key,
         forge_base_url=forge_base_url,
         model=forge_model,

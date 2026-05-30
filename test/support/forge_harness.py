@@ -7,13 +7,7 @@ from contextlib import nullcontext
 from typing import Any
 
 from assertions_lib import summarize_failed_tool_calls
-from e2e_types import (
-    E2EScenario,
-    ForgeRunResult,
-    RunMetrics,
-    ToolCallMetric,
-    ToolContextMode,
-)
+from e2e_types import E2EScenario, ForgeRunResult, RunMetrics, ToolCallMetric
 from fastmcp import FastMCP
 from forge_logging import (
     chat_messages_stats,
@@ -26,11 +20,7 @@ from forge_logging import (
     write_forge_trace,
 )
 from forge_pytest_integration import LAST_FORGE_RUN
-from mcp_openai_bridge import (
-    build_forge_system_message,
-    build_openai_tools_filtered,
-    build_openai_tools_full,
-)
+from mcp_openai_bridge import build_forge_system_message, build_openai_tools_full
 from mcp_write_guard import (
     current_allowed_write_tools,
     guarded_dispatch_mcp,
@@ -74,7 +64,6 @@ async def run_forge_scenario(
     *,
     scenario: E2EScenario,
     mcp_app: FastMCP,
-    tool_context_mode: ToolContextMode,
     forge_api_key: str,
     forge_base_url: str,
     model: str,
@@ -82,22 +71,12 @@ async def run_forge_scenario(
     isolated_space_id: str | None = None,
     isolated_space_name: str | None = None,
 ) -> ForgeRunResult:
-    if tool_context_mode == "minimal":
-        openai_tools = await build_openai_tools_filtered(
-            mcp_app, scenario.allowed_tools_for_minimal_context
-        )
-        context_names = scenario.allowed_tools_for_minimal_context
-    else:
-        openai_tools, context_names = await build_openai_tools_full(mcp_app)
-
+    openai_tools, context_names = await build_openai_tools_full(mcp_app)
     openai_names = frozenset(t["function"]["name"] for t in openai_tools)
-    if openai_names != context_names and tool_context_mode == "full":
+    if openai_names != context_names:
         missing = context_names - openai_names
         if missing:
             raise RuntimeError(f"Missing tools in OpenAI export: {sorted(missing)}")
-    elif tool_context_mode == "minimal":
-        if openai_names != scenario.allowed_tools_for_minimal_context:
-            raise RuntimeError("Minimal tool export does not match scenario allowlist")
 
     metrics = RunMetrics(tools_in_context_count=len(openai_tools), tool_call_count=0)
     tools_ctx = mcp_tools_context_stats(openai_tools)
@@ -244,14 +223,13 @@ async def run_forge_scenario(
         "schema_version": "plgrid-forge-e2e-trace/1",
         "scenario": {
             "name": scenario.name,
-            "tool_context_mode": tool_context_mode,
             "dispatch_mode": "mcp",
             "temperature": scenario.temperature,
             "max_tokens_cap": scenario.max_tokens,
             "max_tool_rounds_cap": scenario.max_tool_rounds,
             "required_tools_sorted": sorted(scenario.required_tools),
             "forbidden_tools_sorted": sorted(scenario.forbidden_tools),
-            "allowed_tools_minimal_sorted": sorted(scenario.allowed_tools_for_minimal_context),
+            "tools_in_context_sorted": sorted(context_names),
             "user_prompt": scenario.user_prompt,
             "scenario_system_prompt": scenario.system_prompt,
             "mcp_server_instructions": mcp_server_instructions,
@@ -300,7 +278,6 @@ async def run_forge_scenario(
 
     result_obj = ForgeRunResult(
         scenario=scenario,
-        tool_context_mode=tool_context_mode,
         dispatch_mode="mcp",
         metrics=metrics,
         final_assistant_text=final_text,

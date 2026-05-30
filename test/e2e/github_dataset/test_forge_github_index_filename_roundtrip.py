@@ -17,7 +17,6 @@ from github_forge_e2e import (
     GITHUB_FORGE_PYTESTMARK,
     GITHUB_FORGE_USER_SYSTEM,
     GITHUB_JSON_FIELD_NOT_INDEXED_EXAMPLE,
-    HARVESTER_TOOLS,
     assert_successful_harvester_queries,
 )
 from isolated_helpers import es_hits_total
@@ -105,14 +104,12 @@ async def test_forge_github_json_commit_author_email_not_indexed(
         required_tools=frozenset(
             {"get_file_metadata", "get_file_attributes", "query_harvester_index"}
         ),
-        allowed_tools_for_minimal_context=HARVESTER_TOOLS,
         max_tokens=GITHUB_FORGE_MAX_TOKENS,
         max_tool_rounds=12,
     )
     run = await run_shared_forge_scenario(
         scenario=scenario,
         mcp_app=mcp_application,
-        tool_context_mode="minimal",
         forge_api_key=forge_api_key,
         forge_base_url=forge_base_url,
         model=forge_model,

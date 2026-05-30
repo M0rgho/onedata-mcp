@@ -47,7 +47,6 @@ async def test_harvesters_minimal_context_discovers_then_queries(
             "with a straightforward index lookup, and give a brief summary of the result."
         ),
         required_tools=frozenset({"query_harvester_index"}),
-        allowed_tools_for_minimal_context=_MINIMAL_HARVESTER_TOOLS,
         max_tokens=4096,
         max_tool_rounds=20,
     )
@@ -55,7 +54,6 @@ async def test_harvesters_minimal_context_discovers_then_queries(
     outcome = await run_forge_scenario(
         scenario=scenario,
         mcp_app=mcp_application,
-        tool_context_mode="full",
         forge_api_key=forge_api_key,
         forge_base_url=forge_base_url,
         model=forge_model,

@@ -4,7 +4,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
-ToolContextMode = Literal["minimal", "full"]
 ToolDispatchMode = Literal["mcp"]
 
 
@@ -15,7 +14,6 @@ class E2EScenario:
     name: str
     user_prompt: str
     required_tools: frozenset[str]
-    allowed_tools_for_minimal_context: frozenset[str]
     model: str | None = None
     system_prompt: str | None = None
     temperature: float = 0.0
@@ -24,10 +22,6 @@ class E2EScenario:
     require_no_extra_tool_calls: bool = False
     forbidden_tools: frozenset[str] = frozenset()
     allowed_write_tools: frozenset[str] = frozenset()
-
-    def __post_init__(self) -> None:
-        if not self.required_tools.issubset(self.allowed_tools_for_minimal_context):
-            raise ValueError("required_tools must be a subset of allowed_tools_for_minimal_context")
 
 
 @dataclass
@@ -94,7 +88,6 @@ class RunMetrics:
 @dataclass
 class ForgeRunResult:
     scenario: E2EScenario
-    tool_context_mode: ToolContextMode
     dispatch_mode: ToolDispatchMode
     metrics: RunMetrics
     final_assistant_text: str | None

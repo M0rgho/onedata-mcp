@@ -77,14 +77,12 @@ async def test_e2e_github_index_reports_event_type_for_named_event_file(
             "as stored (not a guess). Reply in plain text." + _ANSWER_TAIL
         ),
         required_tools=frozenset({"query_harvester_index"}),
-        allowed_tools_for_minimal_context=_GITHUB_FORGE_TOOLS,
         max_tokens=_GITHUB_COMPLEX_MAX_TOKENS,
         max_tool_rounds=_GITHUB_COMPLEX_MAX_TOOL_ROUNDS,
     )
     run = await run_forge_scenario(
         scenario=scenario,
         mcp_app=mcp_application,
-        tool_context_mode="full",
         forge_api_key=forge_api_key,
         forge_base_url=forge_base_url,
         model=forge_model,
@@ -119,14 +117,12 @@ async def test_e2e_github_index_reports_repo_slug_for_named_event_file(
             "under repo metadata (verbatim from the hit)." + _ANSWER_TAIL
         ),
         required_tools=frozenset({"query_harvester_index"}),
-        allowed_tools_for_minimal_context=_GITHUB_FORGE_TOOLS,
         max_tokens=_GITHUB_COMPLEX_MAX_TOKENS,
         max_tool_rounds=_GITHUB_COMPLEX_MAX_TOOL_ROUNDS,
     )
     run = await run_forge_scenario(
         scenario=scenario,
         mcp_app=mcp_application,
-        tool_context_mode="full",
         forge_api_key=forge_api_key,
         forge_base_url=forge_base_url,
         model=forge_model,
@@ -160,14 +156,12 @@ async def test_e2e_github_index_finds_push_event_for_repo_slug(
             "exactly once in your answer, quoting tool output semantics." + _ANSWER_TAIL
         ),
         required_tools=frozenset({"query_harvester_index", "list_user_harvesters"}),
-        allowed_tools_for_minimal_context=_GITHUB_FORGE_TOOLS,
         max_tokens=_GITHUB_COMPLEX_MAX_TOKENS,
         max_tool_rounds=_GITHUB_COMPLEX_MAX_TOOL_ROUNDS,
     )
     run = await run_forge_scenario(
         scenario=scenario,
         mcp_app=mcp_application,
-        tool_context_mode="full",
         forge_api_key=forge_api_key,
         forge_base_url=forge_base_url,
         model=forge_model,

@@ -40,13 +40,11 @@ async def test_find_space_question_selects_list_available_spaces(
             "I'd like a short list of the space names if you can figure that out."
         ),
         required_tools=frozenset({"list_available_spaces"}),
-        allowed_tools_for_minimal_context=frozenset({"list_available_spaces"}),
         max_tokens=4096,
     )
     run = await run_forge_scenario(
         scenario=scenario,
         mcp_app=mcp_application,
-        tool_context_mode=tool_context_mode,  # type: ignore[arg-type]
         forge_api_key=forge_api_key,
         forge_base_url=forge_base_url,
         model=forge_model,

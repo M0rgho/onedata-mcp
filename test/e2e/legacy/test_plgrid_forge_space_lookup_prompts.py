@@ -46,13 +46,11 @@ async def test_space_lookup_prompts(
         name=f"space-param-{hash(user_prompt) % 10_000}",
         user_prompt=user_prompt,
         required_tools=frozenset({"list_available_spaces"}),
-        allowed_tools_for_minimal_context=frozenset({"list_available_spaces"}),
         max_tokens=4096,
     )
     run = await run_forge_scenario(
         scenario=scenario,
         mcp_app=mcp_application,
-        tool_context_mode=tool_context_mode,  # type: ignore[arg-type]
         forge_api_key=forge_api_key,
         forge_base_url=forge_base_url,
         model=forge_model,

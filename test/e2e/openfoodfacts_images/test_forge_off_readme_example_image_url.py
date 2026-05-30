@@ -9,7 +9,6 @@ from assertions_lib import assert_forge_scenario_outcome
 from e2e_types import E2EScenario
 from legacy_forge import run_shared_forge_scenario
 from openfoodfacts_forge_e2e import (
-    HARVESTER_TOOLS,
     OPENFOODFACTS_FORGE_MAX_TOKENS,
     OPENFOODFACTS_FORGE_MAX_TOOL_ROUNDS,
     OPENFOODFACTS_FORGE_PYTESTMARK,
@@ -49,14 +48,12 @@ async def test_forge_off_readme_example_raw_image_https_url(
             "what HTTPS URL fetches image 1 per the space README?"
         ),
         required_tools=frozenset({"grep_file_content"}),
-        allowed_tools_for_minimal_context=HARVESTER_TOOLS,
         max_tokens=OPENFOODFACTS_FORGE_MAX_TOKENS,
         max_tool_rounds=OPENFOODFACTS_FORGE_MAX_TOOL_ROUNDS,
     )
     run = await run_shared_forge_scenario(
         scenario=scenario,
         mcp_app=mcp_application,
-        tool_context_mode="full",
         forge_api_key=forge_api_key,
         forge_base_url=forge_base_url,
         model=forge_model,

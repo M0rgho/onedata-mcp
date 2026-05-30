@@ -40,16 +40,12 @@ async def test_forge_github_harvester_index_pair(
             "does it expose? Summarize in plain language (names and ids if you find them)."
         ),
         required_tools=frozenset({"list_user_harvesters"}),
-        allowed_tools_for_minimal_context=frozenset(
-            {"list_user_harvesters", "list_available_spaces"}
-        ),
         max_tokens=GITHUB_FORGE_MAX_TOKENS,
         max_tool_rounds=16,
     )
     run = await run_shared_forge_scenario(
         scenario=scenario,
         mcp_app=mcp_application,
-        tool_context_mode="full",
         forge_api_key=forge_api_key,
         forge_base_url=forge_base_url,
         model=forge_model,

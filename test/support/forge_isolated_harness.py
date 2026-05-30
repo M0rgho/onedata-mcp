@@ -10,7 +10,7 @@ from assertions_lib import (
     assert_tool_arguments_stay_in_isolated_space,
 )
 from e2e_isolated_space import IsolatedE2ESpace, use_admin_oneprovider_token
-from e2e_types import E2EScenario, ForgeRunResult, ToolContextMode
+from e2e_types import E2EScenario, ForgeRunResult
 from fastmcp import FastMCP
 from forge_harness import run_forge_scenario
 
@@ -23,7 +23,6 @@ async def run_isolated_forge_scenario(
     scenario: E2EScenario,
     space: IsolatedE2ESpace,
     mcp_app: FastMCP,
-    tool_context_mode: ToolContextMode,
     forge_api_key: str,
     forge_base_url: str,
     model: str,
@@ -50,7 +49,6 @@ async def run_isolated_forge_scenario(
     run = await run_forge_scenario(
         scenario=scenario,
         mcp_app=mcp_app,
-        tool_context_mode=tool_context_mode,
         forge_api_key=forge_api_key,
         forge_base_url=forge_base_url,
         model=model,
