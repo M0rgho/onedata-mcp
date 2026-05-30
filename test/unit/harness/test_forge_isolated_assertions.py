@@ -16,7 +16,7 @@ from e2e_types import E2EScenario, ForgeRunResult, RunMetrics, ToolCallMetric
 def _space() -> IsolatedE2ESpace:
     return IsolatedE2ESpace(
         space_id="859a3016ba09be09f14f7d904c4cc7e6ch805d",
-        space_name="mcp-e2e-read-state",
+        space_name="my-storage",
         provider_token="tok",
     )
 
@@ -95,7 +95,7 @@ def test_assert_forbidden_tools_rejects_blocked_tool() -> None:
                 tool_name="delete_file",
                 duration_ms=1.0,
                 ok=True,
-                arguments={"path": "/mcp-e2e-read-state/x"},
+                arguments={"path": "/my-storage/x"},
             )
         ],
         forbidden=frozenset({"delete_file"}),

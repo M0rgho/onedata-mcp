@@ -76,6 +76,12 @@ _SESSION_CREATED_SPACE_IDS: set[str] = set()
 _E2E_HARVESTER_PAIR: tuple[str, str] | None = None
 _HARVESTER_SCOPES = frozenset({"read-state", "harvester"})
 
+# Stable Onedata space display names for isolated E2E scopes (not mcp-e2e-{scope}).
+_STABLE_ISOLATED_SPACE_NAMES: dict[str, str] = {
+    "read-state": "my-storage",
+    "write-state": "my-workspace",
+}
+
 
 @dataclass(frozen=True)
 class IsolatedE2ESpace:
@@ -759,6 +765,8 @@ async def delete_user_space(space_id: str) -> None:
 
 
 def make_space_name(*, suffix: str = "") -> str:
+    if suffix in _STABLE_ISOLATED_SPACE_NAMES:
+        return _STABLE_ISOLATED_SPACE_NAMES[suffix]
     prefix = os.getenv("ONEDATA_E2E_SPACE_PREFIX", _DEFAULT_PREFIX).strip() or _DEFAULT_PREFIX
     part = suffix or uuid.uuid4().hex[:10]
     name = f"{prefix}-{part}"

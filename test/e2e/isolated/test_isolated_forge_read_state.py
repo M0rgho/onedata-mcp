@@ -5,27 +5,50 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-from e2e_isolated_space import IsolatedE2ESpace
+from assertions_lib import assert_forge_scenario_outcome
+from e2e_isolated_space import IsolatedE2ESpace, use_admin_oneprovider_token
 from e2e_oracles import assert_list_spaces_oracle
-from e2e_types import E2EScenario
+from e2e_types import E2EScenario, ForgeRunResult
 from env_checks import forge_credentials_available, onedata_credentials_available
 from forge_isolated_harness import run_isolated_forge_scenario
+from isolated_grep_documents import (
+    DOCUMENTS_DIR_NAME,
+    GREP_DECOY_BASENAME,
+    GREP_MULTI_FILE_NEEDLE,
+    GREP_TARGET_BASENAME,
+    grep_multi_file_documents,
+)
 from isolated_helpers import (
-    es_hits_total,
+    basenames_with_posix_777,
     require_harvester_index,
     seed_file,
-    wait_for_harvester_hits,
+    set_file_posix_permissions,
 )
 from plgrid_ground_truth import ground_truth_file_size_bytes, mcp_tool_json_result
 
-from onedata_mcp.api.files import get_file_id
-from onedata_mcp.api.harvesters import harvester_es_search_query, harvester_index_query
+from onedata_mcp.api.files import get_file_attributes, get_file_id
 
 READ_STATE_SPACE_GROUP = "read-state"
+
+
+def _assert_get_file_id_used_path(run: ForgeRunResult, logical_path: str) -> None:
+    matched = [
+        call
+        for call in run.metrics.tool_calls
+        if call.tool_name == "get_file_id"
+        and call.ok
+        and str(call.arguments.get("path", "")) == logical_path
+    ]
+    assert matched, (
+        f"Expected successful get_file_id with path {logical_path!r}; "
+        f"tool_calls={[(c.tool_name, c.ok, c.arguments) for c in run.metrics.tool_calls]}"
+    )
+
 
 _ISOLATED_SYSTEM_PROMPT = (
     "You are a careful assistant with Onedata MCP tools. Use tools for factual answers "
     "about the connected Oneprovider. Do not invent space names, paths, or file ids."
+    "Do not format dates or numbers in the answers unless specifically asked."
 )
 
 pytestmark = [
@@ -67,7 +90,7 @@ async def test_forge_list_spaces(
     scenario = E2EScenario(
         name="isolated-forge-list-spaces",
         system_prompt=_ISOLATED_SYSTEM_PROMPT,
-        user_prompt="List every Onedata space name available on this Oneprovider.",
+        user_prompt="List every available Onedata space name.",
         required_tools=frozenset({"list_available_spaces"}),
         require_no_extra_tool_calls=True,
         forbidden_tools=frozenset({"list_files", "get_file_id", "create_file"}),
@@ -85,8 +108,8 @@ async def test_forge_list_spaces(
     )
 
 
-@pytest.mark.e2e_scenario("file-id-roundtrip")
-async def test_forge_file_id_roundtrip(
+@pytest.mark.e2e_scenario("find-file-creation-time")
+async def test_forge_file_creation_time(
     request: Any,
     mcp_application_isolated: Any,
     isolated_e2e_space: IsolatedE2ESpace,
@@ -95,40 +118,36 @@ async def test_forge_file_id_roundtrip(
     forge_model: str,
     forge_base_url: str,
 ) -> None:
-    logical_path = f"{isolated_e2e_space.root_path}/e2e-roundtrip/hello.txt"
-    expected_name = "hello.txt"
-    oracle: dict[str, str] = {}
+    logical_path = f"{isolated_e2e_space.root_path}/e2e-creation-time/hello.txt"
+    oracle: dict[str, int] = {}
 
     async def setup(space: IsolatedE2ESpace, admin: str) -> None:
-        await seed_file(logical_path, "roundtrip-body\n", admin_token=admin)
-        oracle["file_id"] = await get_file_id(logical_path)
+        await seed_file(logical_path, "creation-time-body\n", admin_token=admin)
+        async with use_admin_oneprovider_token(admin):
+            attrs = await get_file_attributes(logical_path, attributes=["creationTime"])
+        creation_time = attrs.get("creationTime")
+        assert isinstance(creation_time, int)
+        oracle["creation_time"] = creation_time
 
     async def verify(space: IsolatedE2ESpace, app: Any) -> None:
         attrs = await mcp_tool_json_result(
             app,
             "get_file_attributes",
             {
-                "file_id_or_path": oracle["file_id"],
-                "attributes": ["fileId", "name", "path"],
+                "file_id_or_path": logical_path,
+                "attributes": ["creationTime"],
             },
         )
         assert isinstance(attrs, dict)
-        assert attrs.get("fileId") == oracle["file_id"]
-        assert attrs.get("name") == expected_name
-        assert attrs.get("path") in {
-            logical_path.lstrip("/"),
-            logical_path,
-        }
+        assert attrs.get("creationTime") == oracle["creation_time"]
 
     scenario = E2EScenario(
-        name="isolated-forge-file-id-roundtrip",
+        name="isolated-forge-file-creation-time",
         system_prompt=_ISOLATED_SYSTEM_PROMPT,
-        user_prompt=(
-            f"Find {logical_path!r} call get_file_id, then get_file_attributes "
-            "using only the returned file id (include fileId, name, and path attributes)."
-        ),
-        required_tools=frozenset[str]({"get_file_id", "get_file_attributes"}),
+        user_prompt=(f"What is the Onedata file creation time for {logical_path!r}? "),
+        required_tools=frozenset({"get_file_attributes"}),
         require_no_extra_tool_calls=True,
+        forbidden_tools=frozenset({"download_file", "create_file"}),
     )
 
     await run_isolated_forge_scenario(
@@ -145,8 +164,8 @@ async def test_forge_file_id_roundtrip(
     )
 
 
-@pytest.mark.e2e_scenario("path-by-file-id")
-async def test_forge_path_by_file_id(
+@pytest.mark.e2e_scenario("find-file-by-path")
+async def test_forge_find_file_by_path(
     request: Any,
     mcp_application_isolated: Any,
     isolated_e2e_space: IsolatedE2ESpace,
@@ -155,37 +174,52 @@ async def test_forge_path_by_file_id(
     forge_model: str,
     forge_base_url: str,
 ) -> None:
-    logical_path = f"{isolated_e2e_space.root_path}/e2e-path-by-id/target.txt"
-    expected_path = logical_path.lstrip("/")
+    file_basename = "target.txt"
+    dir_path = f"{isolated_e2e_space.root_path}/e2e-find-by-path/nested-directory"
+    logical_path = f"{dir_path}/{file_basename}"
     oracle: dict[str, str] = {}
 
     async def setup(space: IsolatedE2ESpace, admin: str) -> None:
-        await seed_file(logical_path, "path-by-id\n", admin_token=admin)
-        oracle["file_id"] = await get_file_id(logical_path)
+        await seed_file(logical_path, "find-by-path\n", admin_token=admin)
+        async with use_admin_oneprovider_token(admin):
+            oracle["file_id"] = await get_file_id(logical_path)
 
     async def verify(space: IsolatedE2ESpace, app: Any) -> None:
+        resolved_id = await mcp_tool_json_result(
+            app,
+            "get_file_id",
+            {"path": logical_path},
+        )
+        assert isinstance(resolved_id, str) and resolved_id
+        assert resolved_id == oracle["file_id"]
+
         attrs = await mcp_tool_json_result(
             app,
             "get_file_attributes",
-            {"file_id_or_path": oracle["file_id"], "attributes": ["path", "fileId"]},
+            {
+                "file_id_or_path": resolved_id,
+                "attributes": ["path", "fileId", "name"],
+            },
         )
         assert isinstance(attrs, dict)
-        reported = attrs.get("path")
-        assert isinstance(reported, str)
-        assert reported in {expected_path, logical_path}
+        assert attrs.get("fileId") == oracle["file_id"]
+        assert attrs.get("name") == file_basename
+        reported_path = attrs.get("path")
+        assert isinstance(reported_path, str)
+        assert reported_path == logical_path
 
     scenario = E2EScenario(
-        name="isolated-forge-path-by-file-id",
+        name="isolated-forge-find-file-by-path",
         system_prompt=_ISOLATED_SYSTEM_PROMPT,
         user_prompt=(
-            f"Resolve the file id for {logical_path!r}, then call get_file_attributes "
-            "on that id only and report the path field."
+            f"The file {file_basename!r} lives under {dir_path!r}. What is its Onedata file id?"
         ),
-        required_tools=frozenset({"get_file_id", "get_file_attributes"}),
+        required_tools=frozenset({"get_file_id"}),
         require_no_extra_tool_calls=True,
+        forbidden_tools=frozenset({"list_files", "list_files_recursive", "create_file"}),
     )
 
-    await run_isolated_forge_scenario(
+    run = await run_isolated_forge_scenario(
         scenario=scenario,
         space=isolated_e2e_space,
         mcp_app=mcp_application_isolated,
@@ -197,6 +231,7 @@ async def test_forge_path_by_file_id(
         setup=setup,
         verify_state=verify,
     )
+    _assert_get_file_id_used_path(run, logical_path)
 
 
 @pytest.mark.e2e_scenario("list-children")
@@ -210,11 +245,16 @@ async def test_forge_list_children(
     forge_base_url: str,
 ) -> None:
     parent_path = f"{isolated_e2e_space.root_path}/e2e-children"
-    child_basename = "child-a.txt"
+    child_basenames = tuple(f"child-{label}.txt" for label in ("a", "b", "c", "d", "e"))
+    probe_basename = child_basenames[0]
 
     async def setup(space: IsolatedE2ESpace, admin: str) -> None:
-        await seed_file(f"{parent_path}/{child_basename}", "child-a\n", admin_token=admin)
-        await seed_file(f"{parent_path}/child-b.txt", "child-b\n", admin_token=admin)
+        for basename in child_basenames:
+            await seed_file(
+                f"{parent_path}/{basename}",
+                f"{basename}\n",
+                admin_token=admin,
+            )
 
     async def verify(space: IsolatedE2ESpace, app: Any) -> None:
         listing = await mcp_tool_json_result(
@@ -230,15 +270,14 @@ async def test_forge_list_children(
             for entry in children
             if isinstance(entry, dict) and isinstance(entry.get("name"), str)
         }
-        assert child_basename in names
+        missing = set(child_basenames) - names
+        assert not missing, f"list_files missing seeded children: {sorted(missing)}"
+        assert probe_basename in names
 
     scenario = E2EScenario(
         name="isolated-forge-list-children",
         system_prompt=_ISOLATED_SYSTEM_PROMPT,
-        user_prompt=(
-            f"Under parent path {parent_path!r}, list children (one level) and confirm "
-            f"{child_basename!r} is present. Use list_files."
-        ),
+        user_prompt=(f"List all files names in directory {parent_path!r}."),
         required_tools=frozenset({"list_files"}),
         require_no_extra_tool_calls=True,
     )
@@ -257,6 +296,81 @@ async def test_forge_list_children(
     )
 
 
+@pytest.mark.e2e_scenario("find-posix-777")
+async def test_forge_find_posix_777(
+    request: Any,
+    mcp_application_isolated: Any,
+    isolated_e2e_space: IsolatedE2ESpace,
+    onedata_admin_token: str,
+    forge_api_key: str,
+    forge_model: str,
+    forge_base_url: str,
+) -> None:
+    perm_dir = f"{isolated_e2e_space.root_path}/e2e-posix-777"
+    file_basenames = (
+        "audit.log",
+        "budget.csv",
+        "quota-note.txt",
+        "readme.md",
+        "summary.txt",
+    )
+    target_basename = "quota-note.txt"
+
+    async def setup(space: IsolatedE2ESpace, admin: str) -> None:
+        _ = space
+        for basename in file_basenames:
+            path = f"{perm_dir}/{basename}"
+            await seed_file(path, f"{basename}\n", admin_token=admin)
+            if basename == target_basename:
+                await set_file_posix_permissions(path, "0777", admin_token=admin)
+
+    async def verify(space: IsolatedE2ESpace, app: Any) -> None:
+        _ = space
+        listing = await mcp_tool_json_result(
+            app,
+            "list_files",
+            {
+                "parent_id_or_path": perm_dir,
+                "limit": 50,
+                "attributes": ["name", "posixPermissions"],
+            },
+        )
+        marked = basenames_with_posix_777(listing)
+        assert marked == {target_basename}
+
+    scenario = E2EScenario(
+        name="isolated-forge-find-posix-777",
+        system_prompt=_ISOLATED_SYSTEM_PROMPT,
+        user_prompt=(
+            f"In directory {perm_dir!r} find the file with POSIX permissions 0777, return it's filename"
+        ),
+        required_tools=frozenset(),
+        require_no_extra_tool_calls=False,
+        forbidden_tools=frozenset(
+            {"create_file", "delete_file", "set_file_xattrs", "set_file_metadata"}
+        ),
+    )
+
+    run = await run_isolated_forge_scenario(
+        scenario=scenario,
+        space=isolated_e2e_space,
+        mcp_app=mcp_application_isolated,
+        forge_api_key=forge_api_key,
+        forge_base_url=forge_base_url,
+        model=forge_model,
+        pytest_request=request,
+        admin_token=onedata_admin_token,
+        setup=setup,
+        verify_state=verify,
+    )
+    assert_forge_scenario_outcome(
+        run,
+        answer_fragments=(target_basename,),
+        answer_hint="Final reply must name the sole file with mode 0777.",
+        any_of=(frozenset({"get_file_attributes", "list_files"}),),
+    )
+
+
 @pytest.mark.e2e_scenario("grep-multi-file")
 async def test_forge_grep_multi_file(
     request: Any,
@@ -267,34 +381,41 @@ async def test_forge_grep_multi_file(
     forge_model: str,
     forge_base_url: str,
 ) -> None:
-    parent = f"{isolated_e2e_space.root_path}/e2e-grep-multi"
-    needle = "E2E_FORGE_GREP_MARKER"
-    target_basename = "has-marker.txt"
-    target_path = f"{parent}/{target_basename}"
+    documents_dir = f"{isolated_e2e_space.root_path}/{DOCUMENTS_DIR_NAME}"
+    target_path = f"{documents_dir}/{GREP_TARGET_BASENAME}"
 
     async def setup(space: IsolatedE2ESpace, admin: str) -> None:
         _ = space
-        await seed_file(f"{parent}/plain-a.txt", "alpha only\n", admin_token=admin)
-        await seed_file(target_path, f"before\n{needle}\nafter\n", admin_token=admin)
-        await seed_file(f"{parent}/plain-b.txt", "beta only\n", admin_token=admin)
+        for basename, body in grep_multi_file_documents():
+            await seed_file(f"{documents_dir}/{basename}", body, admin_token=admin)
 
     async def verify(space: IsolatedE2ESpace, app: Any) -> None:
         _ = space
-        grep_out = await mcp_tool_json_result(
+        target_grep = await mcp_tool_json_result(
             app,
             "grep_file_content",
-            {"file_id_or_path": target_path, "pattern": needle},
+            {"file_id_or_path": target_path, "pattern": GREP_MULTI_FILE_NEEDLE},
         )
-        assert isinstance(grep_out, str)
-        assert needle in grep_out
+        assert isinstance(target_grep, str)
+        assert GREP_MULTI_FILE_NEEDLE in target_grep
+
+        decoy_grep = await mcp_tool_json_result(
+            app,
+            "grep_file_content",
+            {
+                "file_id_or_path": f"{documents_dir}/{GREP_DECOY_BASENAME}",
+                "pattern": GREP_MULTI_FILE_NEEDLE,
+            },
+        )
+        assert isinstance(decoy_grep, str)
+        assert GREP_MULTI_FILE_NEEDLE not in decoy_grep
 
     scenario = E2EScenario(
         name="isolated-forge-grep-multi-file",
         system_prompt=_ISOLATED_SYSTEM_PROMPT,
         user_prompt=(
-            f"Under {parent!r} there are three text files: plain-a.txt, {target_basename}, "
-            f"and plain-b.txt. Use grep_file_content to find which file contains the literal "
-            f"{needle!r} and report its basename."
+            f"I keep working notes in the documents folder at {documents_dir!r}. "
+            f"Find which file contains the text {GREP_MULTI_FILE_NEEDLE!r} and tell me its filename."
         ),
         required_tools=frozenset({"grep_file_content"}),
         require_no_extra_tool_calls=False,
@@ -315,7 +436,7 @@ async def test_forge_grep_multi_file(
     )
 
 
-@pytest.mark.e2e_scenario("file-size-bytes")
+@pytest.mark.e2e_scenario("find-file-size")
 async def test_forge_file_size_bytes(
     request: Any,
     mcp_application_isolated: Any,
@@ -325,29 +446,38 @@ async def test_forge_file_size_bytes(
     forge_model: str,
     forge_base_url: str,
 ) -> None:
-    logical_path = f"{isolated_e2e_space.root_path}/e2e-forge-size/payload.txt"
+    size_dir = f"{isolated_e2e_space.root_path}/e2e-forge-size"
+    logical_path = f"{size_dir}/payload.txt"
     content = "forge-size-probe"
+    expected_bytes = len(content.encode())
 
     async def setup(space: IsolatedE2ESpace, admin: str) -> None:
+        await seed_file(
+            f"{size_dir}/readme.txt",
+            "Unrelated readme — not the file you were asked about.\n" * 12,
+            admin_token=admin,
+        )
+        await seed_file(
+            f"{size_dir}/changelog.txt",
+            "Distraction changelog with a different byte length entirely.\n" * 8,
+            admin_token=admin,
+        )
         await seed_file(logical_path, content, admin_token=admin)
 
     async def verify(space: IsolatedE2ESpace, app: Any) -> None:
         size = await ground_truth_file_size_bytes(app, logical_path)
-        assert size == len(content.encode())
+        assert size == expected_bytes
 
     scenario = E2EScenario(
         name="isolated-forge-file-size-bytes",
         system_prompt=_ISOLATED_SYSTEM_PROMPT,
-        user_prompt=(
-            f"What is the size in bytes of {logical_path!r}? "
-            "Use get_file_attributes and return only the number."
-        ),
+        user_prompt=(f"What is the size in bytes of {logical_path!r}?"),
         required_tools=frozenset({"get_file_attributes"}),
         require_no_extra_tool_calls=True,
         forbidden_tools=frozenset({"grep_file_content", "download_file"}),
     )
 
-    await run_isolated_forge_scenario(
+    run = await run_isolated_forge_scenario(
         scenario=scenario,
         space=isolated_e2e_space,
         mcp_app=mcp_application_isolated,
@@ -359,10 +489,15 @@ async def test_forge_file_size_bytes(
         setup=setup,
         verify_state=verify,
     )
+    assert_forge_scenario_outcome(
+        run,
+        answer_fragments=(str(expected_bytes),),
+        answer_hint=f"Final reply must include byte size {expected_bytes}.",
+    )
 
 
-@pytest.mark.e2e_scenario("schema-match-all")
-async def test_forge_schema_match_all(
+@pytest.mark.e2e_scenario("list-harvester-indexes")
+async def test_forge_list_harvester_indexes(
     request: Any,
     mcp_application_isolated: Any,
     isolated_e2e_space: IsolatedE2ESpace,
@@ -372,42 +507,41 @@ async def test_forge_schema_match_all(
     forge_base_url: str,
 ) -> None:
     harvester_id, index_id = await require_harvester_index(isolated_e2e_space)
-    probe_path = f"{isolated_e2e_space.root_path}/e2e-harvest/probe.txt"
-
-    async def setup(space: IsolatedE2ESpace, admin: str) -> None:
-        await seed_file(probe_path, "harvest-probe\n", admin_token=admin)
-        await wait_for_harvester_hits(harvester_id, index_id)
 
     async def verify(space: IsolatedE2ESpace, app: Any) -> None:
-        _ = space
-        body = await mcp_tool_json_result(
+        rows = await mcp_tool_json_result(
             app,
-            "query_harvester_index",
-            {
-                "harvester_id": harvester_id,
-                "index_id": index_id,
-                "query": harvester_index_query(
-                    "post",
-                    "_search",
-                    harvester_es_search_query({"size": 1, "query": {"match_all": {}}}),
-                ),
-            },
+            "list_user_harvesters",
+            {"space_name": space.space_name},
         )
-        total = es_hits_total(body)
-        assert total is not None and total >= 1
+        assert isinstance(rows, list)
+        harvester_ids = {
+            row.get("harvesterId")
+            for row in rows
+            if isinstance(row, dict) and isinstance(row.get("harvesterId"), str)
+        }
+        assert harvester_id in harvester_ids
+        match = next(
+            row for row in rows if isinstance(row, dict) and row.get("harvesterId") == harvester_id
+        )
+        indices = match.get("indices")
+        assert isinstance(indices, list) and indices, "expected at least one index"
+        index_ids = {
+            idx.get("indexId")
+            for idx in indices
+            if isinstance(idx, dict) and isinstance(idx.get("indexId"), str)
+        }
+        assert index_id in index_ids
 
     scenario = E2EScenario(
-        name="isolated-forge-schema-match-all",
+        name="isolated-forge-list-harvester-indexes",
         system_prompt=_ISOLATED_SYSTEM_PROMPT,
-        user_prompt=(
-            f"On harvester {harvester_id!r} index {index_id!r}: load the index schema, "
-            "then run a match_all query with size=1."
-        ),
-        required_tools=frozenset({"get_harvester_index_schema", "query_harvester_index"}),
-        require_no_extra_tool_calls=False,
+        user_prompt=("List every search index exposed by user harvesters."),
+        required_tools=frozenset({"list_user_harvesters"}),
+        require_no_extra_tool_calls=True,
     )
 
-    await run_isolated_forge_scenario(
+    run = await run_isolated_forge_scenario(
         scenario=scenario,
         space=isolated_e2e_space,
         mcp_app=mcp_application_isolated,
@@ -416,6 +550,10 @@ async def test_forge_schema_match_all(
         model=forge_model,
         pytest_request=request,
         admin_token=onedata_admin_token,
-        setup=setup,
         verify_state=verify,
+    )
+    assert_forge_scenario_outcome(
+        run,
+        answer_fragments=(index_id,),
+        answer_hint=f"Final reply must mention the harvester index id {index_id!r}.",
     )

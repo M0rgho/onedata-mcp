@@ -9,7 +9,13 @@ import pytest
 from e2e_isolated_space import IsolatedE2ESpace
 from e2e_oracles import assert_list_spaces_oracle, assert_paths_under_prefix
 from env_checks import onedata_credentials_available
-from isolated_helpers import child_names, recursive_paths, seed_file
+from isolated_helpers import (
+    basenames_with_posix_777,
+    child_names,
+    recursive_paths,
+    seed_file,
+    set_file_posix_permissions,
+)
 from plgrid_ground_truth import ground_truth_file_size_bytes, mcp_tool_json_result
 
 from onedata_mcp.api.spaces import list_available_spaces
@@ -131,6 +137,38 @@ async def test_list_children(
         {"parent_id_or_path": parent_path, "limit": 50},
     )
     assert child_basename in child_names(listing)
+
+
+@pytest.mark.e2e_scenario("find-posix-777")
+async def test_find_posix_777(
+    mcp_application_isolated: Any,
+    isolated_e2e_space: IsolatedE2ESpace,
+    onedata_admin_token: str,
+) -> None:
+    """`find-posix-777`: exactly one child file has posixPermissions 0777."""
+    perm_dir = f"{isolated_e2e_space.root_path}/e2e-posix-777"
+    target_basename = "quota-note.txt"
+    other_basenames = ("audit.log", "budget.csv", "readme.md", "summary.txt")
+
+    for basename in (*other_basenames, target_basename):
+        path = f"{perm_dir}/{basename}"
+        await seed_file(path, f"{basename}\n", admin_token=onedata_admin_token)
+    await set_file_posix_permissions(
+        f"{perm_dir}/{target_basename}",
+        "0777",
+        admin_token=onedata_admin_token,
+    )
+
+    listing = await mcp_tool_json_result(
+        mcp_application_isolated,
+        "list_files",
+        {
+            "parent_id_or_path": perm_dir,
+            "limit": 50,
+            "attributes": ["name", "posixPermissions"],
+        },
+    )
+    assert basenames_with_posix_777(listing) == {target_basename}
 
 
 @pytest.mark.e2e_scenario("recursive-prefix")

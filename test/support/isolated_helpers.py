@@ -10,13 +10,15 @@ from e2e_isolated_space import (
     use_admin_oneprovider_token,
 )
 
-from onedata_mcp.api.files import create_file, create_file_bytes
+from onedata_mcp.api.files import create_file, create_file_bytes, get_file_id
 from onedata_mcp.api.harvesters import (
     harvester_es_search_query,
     harvester_index_query,
     list_user_harvesters,
     unwrap_harvester_query_response,
 )
+from onedata_mcp.config import get_oneprovider_config
+from onedata_mcp.utils import request
 
 
 async def seed_file(
@@ -33,6 +35,49 @@ async def seed_file(
             await create_file_bytes(path, content, create_parents=create_parents)
         else:
             await create_file(path, content, create_parents=create_parents)
+
+
+async def set_file_posix_permissions(
+    path: str,
+    mode: str,
+    *,
+    admin_token: str,
+) -> None:
+    """Set POSIX mode on a file via admin token (PUT /data/{fileId})."""
+
+    async with use_admin_oneprovider_token(admin_token):
+        file_id = await get_file_id(path)
+        config = get_oneprovider_config()
+        await request(
+            config,
+            "PUT",
+            f"/data/{file_id}",
+            json_body={"posixPermissions": mode},
+        )
+
+
+def posix_permissions_is_777(value: object) -> bool:
+    if isinstance(value, int):
+        return value == 0o777
+    if isinstance(value, str):
+        stripped = value.strip()
+        return stripped in {"777", "0777"} or stripped.lstrip("0") == "777"
+    return False
+
+
+def basenames_with_posix_777(listing: object) -> set[str]:
+    if not isinstance(listing, dict):
+        return set()
+    children = listing.get("children")
+    if not isinstance(children, list):
+        return set()
+    return {
+        entry.get("name")
+        for entry in children
+        if isinstance(entry, dict)
+        and isinstance(entry.get("name"), str)
+        and posix_permissions_is_777(entry.get("posixPermissions"))
+    }
 
 
 def harvester_index_for_space(

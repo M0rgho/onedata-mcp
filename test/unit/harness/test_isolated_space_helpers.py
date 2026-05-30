@@ -40,8 +40,9 @@ def test_make_space_name_prefix(monkeypatch) -> None:
 
 def test_make_space_name_stable_per_scope(monkeypatch) -> None:
     monkeypatch.setenv("ONEDATA_E2E_SPACE_PREFIX", "mcp-e2e")
-    assert make_space_name(suffix="read-state") == "mcp-e2e-read-state"
-    assert make_space_name(suffix="read-state") == "mcp-e2e-read-state"
+    assert make_space_name(suffix="read-state") == "my-storage"
+    assert make_space_name(suffix="read-state") == "my-storage"
+    assert make_space_name(suffix="write-state") == "my-workspace"
 
 
 def test_e2e_admin_token_prefers_dedicated_env(monkeypatch) -> None:
