@@ -5,7 +5,6 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-
 from e2e_isolated_space import confine_provider_token
 
 

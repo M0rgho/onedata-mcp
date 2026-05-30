@@ -94,7 +94,6 @@ def test_flush_forge_trace_summary_csv_one_file_per_test_directory(tmp_path: Pat
         "schema_version": "plgrid-forge-e2e-trace/1",
         "scenario": {
             "name": "scenario-a",
-            "tool_context_mode": "full",
             "temperature": 0.0,
             "max_tokens_cap": 100,
             "max_tool_rounds_cap": 3,

@@ -4,10 +4,8 @@ from __future__ import annotations
 
 import json
 import time
-from pathlib import Path
 
 import pytest
-
 from e2e_isolated_space import (
     _is_e2e_named_token_name,
     _parse_cache_key,

@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import pytest
 from e2e_types import ForgeRunResult
 from env_checks import forge_credentials_available, onedata_credentials_available
-import pytest
 
 GITHUB_FORGE_USER_SYSTEM = (
     "You help people work with their Onedata storage: spaces, files, and harvester search "

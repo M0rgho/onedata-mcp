@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from e2e_types import E2EScenario
+
 from onedata_mcp.token_policy import WRITE_TOOL_NAMES
 
 # Spaces with long-lived reference data; never mutate from automated tests.

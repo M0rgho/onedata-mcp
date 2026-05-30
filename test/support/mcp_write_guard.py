@@ -9,8 +9,9 @@ from typing import Any
 
 from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
-from onedata_mcp.token_policy import WRITE_TOOL_NAMES
 from tool_serialization import tool_result_to_text
+
+from onedata_mcp.token_policy import WRITE_TOOL_NAMES
 
 # ``None`` = guard disabled (e.g. unit tests). ``frozenset()`` = deny all write tools.
 _allowed_write_tools: ContextVar[frozenset[str] | None] = ContextVar(

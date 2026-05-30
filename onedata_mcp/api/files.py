@@ -1,4 +1,3 @@
-from ast import If
 import json
 from asyncio.log import logger
 from collections.abc import Iterable, Mapping, Sequence

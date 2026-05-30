@@ -12,6 +12,7 @@ from mcp_write_guard import (
     set_allowed_write_tools,
     write_guard_disabled,
 )
+
 from onedata_mcp.token_policy import WRITE_TOOL_NAMES
 
 
@@ -48,9 +49,8 @@ def test_allows_declared_write_tools() -> None:
 
 @pytest.mark.asyncio
 async def test_guarded_call_tool_returns_error_payload(recording_mcp: FastMCP) -> None:
-    with mcp_write_guard(frozenset()):
-        with pytest.raises(McpWriteGuardError):
-            await guarded_call_tool(recording_mcp, "create_file", {})
+    with mcp_write_guard(frozenset()), pytest.raises(McpWriteGuardError):
+        await guarded_call_tool(recording_mcp, "create_file", {})
 
 
 @pytest.mark.asyncio

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 from assertions_lib import (
     assert_forbidden_tools,
     assert_isolated_forge_trace,
@@ -36,14 +35,12 @@ def _run(
         name="t",
         user_prompt="p",
         required_tools=required,
-        allowed_tools_for_minimal_context=required,
         forbidden_tools=forbidden,
     )
     metrics = RunMetrics(tools_in_context_count=1, tool_call_count=len(tools), tool_calls=tools)
     metrics.recompute_tool_sets(scenario.required_tools, forbidden=scenario.forbidden_tools)
     return ForgeRunResult(
         scenario=scenario,
-        tool_context_mode="minimal",
         dispatch_mode="mcp",
         metrics=metrics,
         final_assistant_text=final_text,

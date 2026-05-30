@@ -127,15 +127,14 @@ def assert_tool_arguments_stay_in_isolated_space(
                     )
                     raise AssertionError(msg)
                 continue
-            if value.startswith("/"):
-                if not any(
-                    value == prefix or value.startswith(f"{prefix}/") for prefix in allowed_prefixes
-                ):
-                    msg = (
-                        f"{call.tool_name} argument {key!r}={value!r} is outside isolated "
-                        f"space root {space.root_path!r}"
-                    )
-                    raise AssertionError(msg)
+            if value.startswith("/") and not any(
+                value == prefix or value.startswith(f"{prefix}/") for prefix in allowed_prefixes
+            ):
+                msg = (
+                    f"{call.tool_name} argument {key!r}={value!r} is outside isolated "
+                    f"space root {space.root_path!r}"
+                )
+                raise AssertionError(msg)
 
 
 def _text_contains_fragment(haystack: str, fragment: str) -> bool:

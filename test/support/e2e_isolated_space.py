@@ -8,7 +8,7 @@ import os
 import time
 import uuid
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -629,10 +629,8 @@ async def _remove_space_datasets(space: IsolatedE2ESpace, token: str) -> None:
                 dataset_id = row.get("datasetId")
                 if not isinstance(dataset_id, str):
                     continue
-                try:
+                with suppress(OnedataApiError):
                     await _oneprovider_with_token(token, "DELETE", f"/datasets/{dataset_id}")
-                except OnedataApiError:
-                    pass
     finally:
         if previous is None:
             os.environ.pop("ONEDATA_ONEPROVIDER_TOKEN", None)

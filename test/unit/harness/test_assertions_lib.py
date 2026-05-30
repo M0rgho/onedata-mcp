@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 from assertions_lib import (
     _text_contains_fragment,
     assert_final_answer_contains_all,
@@ -22,9 +21,6 @@ def test_assert_required_tools_any_of_group() -> None:
         name="t",
         user_prompt="p",
         required_tools=frozenset({"query_harvester_index"}),
-        allowed_tools_for_minimal_context=frozenset(
-            {"query_harvester_index", "get_file_id", "list_files"}
-        ),
     )
     metrics = RunMetrics(
         tools_in_context_count=3,
@@ -37,7 +33,6 @@ def test_assert_required_tools_any_of_group() -> None:
     metrics.recompute_tool_sets(scenario.required_tools)
     run = ForgeRunResult(
         scenario=scenario,
-        tool_context_mode="full",
         dispatch_mode="mcp",
         metrics=metrics,
         final_assistant_text="ok",
@@ -54,7 +49,6 @@ def test_assert_required_tools_any_of_group_fails_when_missing() -> None:
         name="t",
         user_prompt="p",
         required_tools=frozenset({"query_harvester_index"}),
-        allowed_tools_for_minimal_context=frozenset({"query_harvester_index"}),
     )
     metrics = RunMetrics(
         tools_in_context_count=1,
@@ -64,7 +58,6 @@ def test_assert_required_tools_any_of_group_fails_when_missing() -> None:
     metrics.recompute_tool_sets(scenario.required_tools)
     run = ForgeRunResult(
         scenario=scenario,
-        tool_context_mode="full",
         dispatch_mode="mcp",
         metrics=metrics,
         final_assistant_text="ok",
@@ -82,7 +75,6 @@ def test_assert_required_tools_relaxed_when_answer_fragments_match() -> None:
         name="t",
         user_prompt="p",
         required_tools=frozenset({"grep_file_content"}),
-        allowed_tools_for_minimal_context=frozenset({"grep_file_content", "download_file"}),
     )
     metrics = RunMetrics(
         tools_in_context_count=2,
@@ -92,7 +84,6 @@ def test_assert_required_tools_relaxed_when_answer_fragments_match() -> None:
     metrics.recompute_tool_sets(scenario.required_tools)
     run = ForgeRunResult(
         scenario=scenario,
-        tool_context_mode="full",
         dispatch_mode="mcp",
         metrics=metrics,
         final_assistant_text=(
@@ -115,11 +106,9 @@ def test_assert_final_answer_contains_all_accepts_comma_formatted_count() -> Non
         name="t",
         user_prompt="p",
         required_tools=frozenset(),
-        allowed_tools_for_minimal_context=frozenset(),
     )
     run = ForgeRunResult(
         scenario=scenario,
-        tool_context_mode="full",
         dispatch_mode="mcp",
         metrics=RunMetrics(0, 0),
         final_assistant_text="User dim12512a has 12,548 PushEvent records.",

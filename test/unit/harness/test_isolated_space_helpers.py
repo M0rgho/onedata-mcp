@@ -6,8 +6,8 @@ import base64
 
 from e2e_isolated_space import (
     _b64_path,
-    _canonical_space_path,
     _cache_key,
+    _canonical_space_path,
     _get_onepanel_config,
     _support_size_bytes,
     e2e_admin_oneprovider_token,
