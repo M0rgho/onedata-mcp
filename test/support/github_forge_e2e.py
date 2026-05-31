@@ -7,14 +7,10 @@ from e2e_types import ForgeRunResult
 from env_checks import forge_credentials_available, onedata_credentials_available
 
 GITHUB_FORGE_USER_SYSTEM = (
-    "You help people work with their Onedata storage: spaces, files, and harvester search "
-    "indexes. Answer from live lookups; do not invent harvester ids, counts, or field names. "
-    "In final replies use plain digits for numbers (12345), never thousands separators "
-    "(not 12,345). For timestamps and mtimes report the raw Unix epoch seconds from the "
-    "tool (e.g. 1774476088), not formatted dates or times (not 2025-12-31 23:48:08 UTC). "
-    "For all repos under a GitHub owner, filter with repo.name prefix Owner/ (owner/repo "
-    "slugs), not org.login — org is often missing on user-owned repos. "
-    "Include every fact the user asked for (names, logins, counts, filenames, mtimes)."
+    "You are a helpful assistant that helps people work with their Onedata storage: spaces, files, and harvester search indexes."
+    "Answer from live lookups; do not invent harvester ids, counts, or field names. "
+    "In final replies use plain digits for numbers, for example '12345' instead of '12,345' "
+    "Also do not format dates or times unless explicitly asked for. "
 )
 
 FILE_LOOKUP_TOOLS = frozenset({"get_file_attributes", "list_files", "get_file_id"})
@@ -42,7 +38,7 @@ GITHUB_FORGE_HARD_MAX_TOOL_ROUNDS = 32
 # term on payload.commits.author.email → 0 hits (not mapped for search).
 GITHUB_JSON_FIELD_NOT_INDEXED_EXAMPLE = {
     "actor_login": "RealCatDev",
-    "repo_slug": "NucTe/ULang",
+    "repo_name": "NucTe/ULang",
     "event_basename": "github_event_40063.dat",
     "commit_message": "Integrated new Result/Error system",
     "prompt_field_label": "commit author email",

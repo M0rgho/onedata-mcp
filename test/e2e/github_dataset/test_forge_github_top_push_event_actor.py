@@ -47,10 +47,7 @@ async def test_forge_github_top_push_event_actor(
         name="forge-github-top-push-event-actor",
         system_prompt=GITHUB_FORGE_USER_SYSTEM,
         user_prompt=(
-            f"We are reviewing activity in {GITHUB_DATASET_SPACE}. "
-            "Which GitHub account has the highest number of PushEvent records in the "
-            "harvester search index, and exactly how many pushes is that? "
-            "Reply with the username and the count."
+            f"In the {GITHUB_DATASET_SPACE} space find and report the GitHub account with the highest number of PushEvent records."
         ),
         required_tools=frozenset({"list_user_harvesters", "query_harvester_index"}),
         max_tokens=GITHUB_FORGE_MAX_TOKENS,

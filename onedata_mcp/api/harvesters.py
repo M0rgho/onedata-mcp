@@ -26,6 +26,52 @@ def harvester_es_search_query(es_body: dict[str, Any]) -> dict[str, Any]:
     return es_body
 
 
+def _flatten_mapping_properties(properties: dict[str, Any], prefix: str = "") -> dict[str, str]:
+    """Flatten an ES ``properties`` block to ``{dotted.path: type}`` entries."""
+    flat: dict[str, str] = {}
+    for name, definition in properties.items():
+        if not isinstance(definition, dict):
+            continue
+        path = f"{prefix}{name}"
+        sub_properties = definition.get("properties")
+        if isinstance(sub_properties, dict):
+            flat.update(_flatten_mapping_properties(sub_properties, f"{path}."))
+            continue
+        field_type = definition.get("type", "object")
+        subfields = definition.get("fields")
+        if isinstance(subfields, dict) and subfields:
+            field_type = f"{field_type}+{'+'.join(sorted(subfields))}"
+        flat[path] = str(field_type)
+    return flat
+
+
+def _mapping_properties_block(mapping: dict[str, Any]) -> dict[str, Any]:
+    """Locate the ``properties`` block in an ES ``_mapping`` response (handles index wrapper)."""
+    if isinstance(mapping.get("properties"), dict):
+        return mapping["properties"]
+    mappings = mapping.get("mappings")
+    if isinstance(mappings, dict) and isinstance(mappings.get("properties"), dict):
+        return mappings["properties"]
+    # Index-name wrapper(s): {"<index>": {"mappings": {"properties": {...}}}}.
+    merged: dict[str, Any] = {}
+    for value in mapping.values():
+        if isinstance(value, dict):
+            merged.update(_mapping_properties_block(value))
+    return merged
+
+
+def flatten_es_mapping(mapping: dict[str, Any]) -> dict[str, str]:
+    """Flatten an ES ``_mapping`` response to a compact ``{dotted.field: type}`` map.
+
+    A ``text`` field carrying a ``keyword`` sub-field is rendered as ``text+keyword`` so callers
+    know to append ``.keyword`` for exact ``term`` / ``wildcard`` matches; a field already typed
+    ``keyword`` needs no suffix. Returns an empty dict when no mapping shape is recognized.
+    """
+    if not isinstance(mapping, dict):
+        return {}
+    return _flatten_mapping_properties(_mapping_properties_block(mapping))
+
+
 class HarvesterIndexQuery(BaseModel):
     """Harvester index request forwarded to the plugin (``method``, ``path``, optional ES ``body``)."""
 
@@ -217,4 +263,9 @@ async def query_harvester_index(
     )
     raw = response["body"]
     unwrapped = unwrap_harvester_query_response(raw)
-    return unwrapped if isinstance(unwrapped, dict) else raw
+    result = unwrapped if isinstance(unwrapped, dict) else raw
+    if q.method == "get" and q.path.strip("/") == "_mapping" and isinstance(result, dict):
+        fields = flatten_es_mapping(result)
+        if fields:
+            return {"fields": fields}
+    return result

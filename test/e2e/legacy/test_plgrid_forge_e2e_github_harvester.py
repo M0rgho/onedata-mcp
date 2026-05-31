@@ -96,19 +96,19 @@ async def test_e2e_github_index_reports_event_type_for_named_event_file(
     )
 
 
-async def test_e2e_github_index_reports_repo_slug_for_named_event_file(
+async def test_e2e_github_index_reports_repo_name_for_named_event_file(
     request: Any,
     mcp_application: Any,
     forge_api_key: str,
     forge_model: str,
     forge_base_url: str,
 ) -> None:
-    """Same document as PR-review test — forces reading ``repo.name`` (owner/repo slug)."""
+    """Same document as PR-review test — forces reading ``repo.name`` (owner/repo)."""
     event_file = "github_event_11898.dat"
-    expected_repo_slug = "Unknown-Studios/react-sitemap-generator"
+    expected_repo_name = "Unknown-Studios/react-sitemap-generator"
 
     scenario = E2EScenario(
-        name="github-harvester-pr-review-repo-slug",
+        name="github-harvester-pr-review-repo-name",
         user_prompt=(
             "Use harvester query tools against the Github harvester's github-index. "
             f"Fetch the indexed row tied to Onedata file "
@@ -131,12 +131,12 @@ async def test_e2e_github_index_reports_repo_slug_for_named_event_file(
     _assert_successful_harvester_queries(run)
     assert_forge_scenario_outcome(
         run,
-        answer_fragments=(expected_repo_slug,),
-        answer_hint="Answer must contain the slug from the Elasticsearch _source.repo.name field.",
+        answer_fragments=(expected_repo_name,),
+        answer_hint="Answer must contain the repository name from the Elasticsearch _source.repo.name field.",
     )
 
 
-async def test_e2e_github_index_finds_push_event_for_repo_slug(
+async def test_e2e_github_index_finds_push_event_for_repo_name(
     request: Any,
     mcp_application: Any,
     forge_api_key: str,
@@ -144,15 +144,15 @@ async def test_e2e_github_index_finds_push_event_for_repo_slug(
     forge_base_url: str,
 ) -> None:
     """Different query shape: filter by ``PushEvent`` + ``repo.name`` (not filename oracle)."""
-    push_repo_slug = "rafnixg/rafnixg"
+    push_repo_name = "rafnixg/rafnixg"
     expected_event_type = "PushEvent"
 
     scenario = E2EScenario(
         name="github-harvester-push-event-by-repo",
         user_prompt=(
             "On the github-index of my Github Harvester, search for indexed GitHub records "
-            f"whose event kind is PushEvent on repository `{push_repo_slug}`. "
-            "Briefly confirm what you matched: mention both **PushEvent** and that repo slug "
+            f"whose event kind is PushEvent on repository `{push_repo_name}`. "
+            "Briefly confirm what you matched: mention both **PushEvent** and that repository name "
             "exactly once in your answer, quoting tool output semantics." + _ANSWER_TAIL
         ),
         required_tools=frozenset({"query_harvester_index", "list_user_harvesters"}),
@@ -170,6 +170,6 @@ async def test_e2e_github_index_finds_push_event_for_repo_slug(
     _assert_successful_harvester_queries(run)
     assert_forge_scenario_outcome(
         run,
-        answer_fragments=(expected_event_type, push_repo_slug),
+        answer_fragments=(expected_event_type, push_repo_name),
         answer_hint="Must reflect a PushEvent hit for rafnixg/rafnixg from elasticsearch results.",
     )

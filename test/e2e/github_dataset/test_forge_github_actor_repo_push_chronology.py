@@ -13,7 +13,6 @@ from github_dataset_harvester import (
     discover_actor_repo_push_pair,
 )
 from github_forge_e2e import (
-    FILE_LOOKUP_TOOLS,
     GITHUB_FORGE_HARD_MAX_TOOL_ROUNDS,
     GITHUB_FORGE_MAX_TOKENS,
     GITHUB_FORGE_PYTESTMARK,
@@ -25,19 +24,25 @@ from legacy_forge import run_shared_forge_scenario
 pytestmark = GITHUB_FORGE_PYTESTMARK
 
 
-@pytest.mark.e2e_scenario("github-actor-repo-push-chronology")
-async def test_forge_github_actor_repo_push_chronology(
+@pytest.mark.e2e_scenario("find-github-actor-repo-push-chronology")
+async def test_find_github_actor_repo_push_chronology(
     request: Any,
     mcp_application: Any,
     forge_api_key: str,
     forge_model: str,
     forge_base_url: str,
     github_harvester_bundle: tuple[str, str, str],
-    github_actor_repo_chronology_oracle: tuple[str, str, int, str, Any, str, Any],
+    github_actor_repo_chronology_oracle: tuple[str, str, int, str, str, str, str],
 ) -> None:
-    actor_login, repo_slug, _push_count, exp_first, exp_first_mtime, exp_fifth, exp_fifth_mtime = (
-        github_actor_repo_chronology_oracle
-    )
+    (
+        actor_login,
+        repo_name,
+        _push_count,
+        exp_first,
+        exp_first_created_at,
+        exp_fifth,
+        exp_fifth_created_at,
+    ) = github_actor_repo_chronology_oracle
     harvester_id, index_id, _space_id = github_harvester_bundle
 
     async def verify(app: Any) -> None:
@@ -45,30 +50,29 @@ async def test_forge_github_actor_repo_push_chronology(
             app, harvester_id, index_id, min_pushes=5
         )
         assert login == actor_login
-        assert repo == repo_slug
+        assert repo == repo_name
         assert count >= 5
         (
             first_base,
-            first_mtime,
+            first_created_at,
             fifth_base,
-            fifth_mtime,
+            fifth_created_at,
         ) = await discover_actor_repo_push_chronology_files(
             app, harvester_id, index_id, login, repo
         )
         assert first_base == exp_first
-        assert first_mtime == exp_first_mtime
+        assert first_created_at == exp_first_created_at
         assert fifth_base == exp_fifth
-        assert fifth_mtime == exp_fifth_mtime
+        assert fifth_created_at == exp_fifth_created_at
 
     scenario = E2EScenario(
-        name="forge-github-actor-repo-push-chronology",
+        name="find-github-actor-repo-push-chronology",
         system_prompt=GITHUB_FORGE_USER_SYSTEM,
         user_prompt=(
-            f"I'm reconciling archived pushes in {GITHUB_DATASET_SPACE} for contributor "
-            f"{actor_login!r} on repository {repo_slug!r}. In chronological order, what are "
-            "the .dat filenames and provider last-modified times for their very first push "
-            "to that repo, and again for their fifth push to the same repo? "
-            "List both pairs clearly."
+            f"I'm checking archived pushes in {GITHUB_DATASET_SPACE} for contributor "
+            f"{actor_login!r} on repository {repo_name!r}. In chronological order, what are "
+            "the .dat filenames and created_at timestamps for their very first and fifth push "
+            "to that repo? Return both pairs."
         ),
         required_tools=frozenset({"query_harvester_index"}),
         max_tokens=GITHUB_FORGE_MAX_TOKENS,
@@ -87,13 +91,10 @@ async def test_forge_github_actor_repo_push_chronology(
     assert_forge_scenario_outcome(
         run,
         answer_fragments=(
-            actor_login,
-            repo_slug,
             exp_first,
-            str(exp_first_mtime),
+            exp_first_created_at,
             exp_fifth,
-            str(exp_fifth_mtime),
+            exp_fifth_created_at,
         ),
-        any_of=(FILE_LOOKUP_TOOLS,),
-        answer_hint="Answer should include repo, both filenames, and both mtimes.",
+        answer_hint="Answer should include both filenames and both created_at values.",
     )

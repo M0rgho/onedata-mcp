@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import re
 from typing import Any
 
 from fastmcp import FastMCP
@@ -15,9 +14,6 @@ from onedata_mcp.api.harvesters import (
     harvester_index_query,
     unwrap_harvester_query_response,
 )
-
-# Internal nicknames for Forge prompts; must not appear in the matched repository slug.
-_CONCEPT_ALIASES = ("pet", "portal", "hub", "stack", "core", "cloud")
 
 GITHUB_DATASET_SPACE = "github_dataset"
 GITHUB_DATASET_DIR = f"/{GITHUB_DATASET_SPACE}/{GITHUB_DATASET_SPACE}"
@@ -42,20 +38,7 @@ async def discover_github_dataset_space_id(app: FastMCP) -> str:
     raise AssertionError(msg)
 
 
-async def discover_github_harvester_bundle(app: FastMCP) -> tuple[str, str, str]:
-    """Return ``(harvester_id, github_index_id, space_id)`` from MCP."""
-
-    space_id = await discover_github_dataset_space_id(app)
-    rows = await mcp_tool_json_result(
-        app,
-        "list_user_harvesters",
-        {"space_name": GITHUB_DATASET_SPACE},
-    )
-    if not isinstance(rows, list) or not rows:
-        raise GithubDatasetHarvesterNotFoundError(
-            f"No harvesters attached to {GITHUB_DATASET_SPACE!r}"
-        )
-
+def _github_harvester_row(rows: list[Any]) -> dict[str, Any]:
     harvester: dict[str, Any] | None = None
     for row in rows:
         if not isinstance(row, dict):
@@ -68,6 +51,57 @@ async def discover_github_harvester_bundle(app: FastMCP) -> tuple[str, str, str]
         harvester = rows[0] if isinstance(rows[0], dict) else None
     if not harvester:
         raise GithubDatasetHarvesterNotFoundError("No harvester row in list_user_harvesters")
+    return harvester
+
+
+def index_ids_from_harvester_row(harvester: dict[str, Any]) -> frozenset[str]:
+    indices = harvester.get("indices")
+    if not isinstance(indices, list):
+        return frozenset()
+    ids: set[str] = set()
+    for entry in indices:
+        if not isinstance(entry, dict):
+            continue
+        index_id = entry.get("indexId") or entry.get("index_id")
+        if isinstance(index_id, str) and index_id:
+            ids.add(index_id)
+    return frozenset(ids)
+
+
+async def _list_github_dataset_harvesters(app: FastMCP) -> list[Any]:
+    rows = await mcp_tool_json_result(
+        app,
+        "list_user_harvesters",
+        {"space_name": GITHUB_DATASET_SPACE},
+    )
+    if not isinstance(rows, list) or not rows:
+        raise GithubDatasetHarvesterNotFoundError(
+            f"No harvesters attached to {GITHUB_DATASET_SPACE!r}"
+        )
+    return rows
+
+
+async def discover_github_harvester_index_ids(app: FastMCP) -> tuple[str, frozenset[str]]:
+    """Return ``(harvester_id, all indexId values)`` for the GitHub harvester on ``github_dataset``."""
+
+    harvester = _github_harvester_row(await _list_github_dataset_harvesters(app))
+    harvester_id = harvester.get("harvesterId")
+    if not isinstance(harvester_id, str) or not harvester_id:
+        raise GithubDatasetHarvesterNotFoundError("Harvester row missing harvesterId")
+
+    index_ids = index_ids_from_harvester_row(harvester)
+    if not index_ids:
+        raise GithubDatasetHarvesterNotFoundError(
+            f"No search indexes on GitHub harvester {harvester_id!r}"
+        )
+    return harvester_id, index_ids
+
+
+async def discover_github_harvester_bundle(app: FastMCP) -> tuple[str, str, str]:
+    """Return ``(harvester_id, github_index_id, space_id)`` from MCP."""
+
+    space_id = await discover_github_dataset_space_id(app)
+    harvester = _github_harvester_row(await _list_github_dataset_harvesters(app))
 
     harvester_id = harvester.get("harvesterId")
     indices = harvester.get("indices")
@@ -183,7 +217,7 @@ def indexed_event_type(source: dict[str, Any]) -> str | None:
     return value if isinstance(value, str) and value else None
 
 
-def indexed_repo_slug(source: dict[str, Any]) -> str | None:
+def indexed_repo_name(source: dict[str, Any]) -> str | None:
     repo = source.get("repo")
     if not isinstance(repo, dict):
         return None
@@ -199,7 +233,34 @@ def indexed_actor_login(source: dict[str, Any]) -> str | None:
     return login if isinstance(login, str) and login else None
 
 
+def harvester_index_schema_properties(schema_payload: object) -> dict[str, Any]:
+    """Return ``mappings.properties`` from a ``get_harvester_index_schema`` response."""
+
+    if not isinstance(schema_payload, dict):
+        return {}
+    raw = schema_payload.get("schema")
+    if isinstance(raw, str):
+        try:
+            parsed: Any = json.loads(raw)
+        except json.JSONDecodeError:
+            return {}
+    elif isinstance(raw, dict):
+        parsed = raw
+    else:
+        return {}
+    if not isinstance(parsed, dict):
+        return {}
+    mappings = parsed.get("mappings")
+    if not isinstance(mappings, dict):
+        return {}
+    properties = mappings.get("properties")
+    return properties if isinstance(properties, dict) else {}
+
+
 def schema_declares_field(schema_payload: object, field_name: str) -> bool:
+    properties = harvester_index_schema_properties(schema_payload)
+    if properties:
+        return field_name in properties
     if not isinstance(schema_payload, dict):
         return False
     raw = schema_payload.get("schema")
@@ -217,7 +278,7 @@ async def discover_indexed_event_with_repo(
     *,
     sample_size: int = 25,
 ) -> tuple[str, str, str]:
-    """Return ``(event_type, repo_slug, basename)`` from a row that has all three."""
+    """Return ``(event_type, repo_name, basename)`` from a row that has all three."""
 
     body = await mcp_harvester_search(
         app,
@@ -243,10 +304,10 @@ async def discover_indexed_event_with_repo(
             continue
         source = hit_source(item)
         event_type = indexed_event_type(source)
-        repo_slug = indexed_repo_slug(source)
+        repo_name = indexed_repo_name(source)
         basename = onedata_meta(source).get("fileName")
-        if event_type and repo_slug and isinstance(basename, str) and basename:
-            return event_type, repo_slug, basename
+        if event_type and repo_name and isinstance(basename, str) and basename:
+            return event_type, repo_name, basename
 
     msg = (
         f"No github-index row with type, repo.name, and __onedata.fileName in "
@@ -416,15 +477,15 @@ async def discover_actor_repo_push_pair(
         for repo_bucket in repo_buckets:
             if not isinstance(repo_bucket, dict):
                 continue
-            repo_slug = repo_bucket.get("key")
+            repo_name = repo_bucket.get("key")
             count = repo_bucket.get("doc_count")
             if (
-                isinstance(repo_slug, str)
-                and repo_slug
+                isinstance(repo_name, str)
+                and repo_name
                 and isinstance(count, int)
                 and count >= min_pushes
             ):
-                return login, repo_slug, count
+                return login, repo_name, count
 
     msg = (
         f"No (actor, repo) PushEvent pair with at least {min_pushes} rows in "
@@ -438,10 +499,10 @@ async def push_event_file_at_chronology_rank(
     harvester_id: str,
     index_id: str,
     actor_login: str,
-    repo_slug: str,
+    repo_name: str,
     rank: int,
-) -> tuple[str, str, Any]:
-    """Return ``(basename, logical_path, mtime)`` for the ``rank``-th PushEvent (1-based, asc)."""
+) -> tuple[str, str, str]:
+    """Return ``(basename, logical_path, created_at)`` for rank-th PushEvent (1-based, asc)."""
 
     if rank < 1:
         msg = f"rank must be >= 1, got {rank}"
@@ -458,7 +519,7 @@ async def push_event_file_at_chronology_rank(
                     "must": [
                         {"term": {"type": "PushEvent"}},
                         {"term": {"actor.login": actor_login}},
-                        {"term": {"repo.name": repo_slug}},
+                        {"term": {"repo.name": repo_name}},
                     ]
                 }
             },
@@ -469,32 +530,22 @@ async def push_event_file_at_chronology_rank(
     hits = _search_hits_list(body)
     if len(hits) < rank:
         msg = (
-            f"Only {len(hits)} PushEvent rows for {actor_login!r} on {repo_slug!r}, "
+            f"Only {len(hits)} PushEvent rows for {actor_login!r} on {repo_name!r}, "
             f"need rank {rank}"
         )
         raise AssertionError(msg)
     hit = hits[rank - 1]
-    basename = onedata_meta(hit_source(hit)).get("fileName")
+    source = hit_source(hit)
+    basename = onedata_meta(source).get("fileName")
     if not isinstance(basename, str) or not basename:
         msg = f"PushEvent rank {rank} missing __onedata.fileName"
         raise AssertionError(msg)
+    created_at = source.get("created_at")
+    if not isinstance(created_at, str) or not created_at:
+        msg = f"PushEvent rank {rank} missing created_at"
+        raise AssertionError(msg)
     logical_path = f"{GITHUB_DATASET_DIR}/{basename}"
-    attrs = await mcp_tool_json_result(
-        app,
-        "get_file_attributes",
-        {
-            "file_id_or_path": logical_path,
-            "attributes": ["mtime", "name", "path"],
-        },
-    )
-    if not isinstance(attrs, dict):
-        msg = "get_file_attributes returned non-object"
-        raise AssertionError(msg)
-    mtime = attrs.get("mtime")
-    if mtime is None:
-        msg = f"No mtime on {logical_path!r}"
-        raise AssertionError(msg)
-    return basename, logical_path, mtime
+    return basename, logical_path, created_at
 
 
 async def discover_actor_repo_push_chronology_files(
@@ -502,19 +553,19 @@ async def discover_actor_repo_push_chronology_files(
     harvester_id: str,
     index_id: str,
     actor_login: str,
-    repo_slug: str,
+    repo_name: str,
     *,
     fifth_rank: int = 5,
-) -> tuple[str, Any, str, Any]:
-    """Return ``(first_basename, first_mtime, fifth_basename, fifth_mtime)``."""
+) -> tuple[str, str, str, str]:
+    """Return ``(first_basename, first_created_at, fifth_basename, fifth_created_at)``."""
 
-    first_base, _first_path, first_mtime = await push_event_file_at_chronology_rank(
-        app, harvester_id, index_id, actor_login, repo_slug, 1
+    first_base, _first_path, first_created_at = await push_event_file_at_chronology_rank(
+        app, harvester_id, index_id, actor_login, repo_name, 1
     )
-    fifth_base, _fifth_path, fifth_mtime = await push_event_file_at_chronology_rank(
-        app, harvester_id, index_id, actor_login, repo_slug, fifth_rank
+    fifth_base, _fifth_path, fifth_created_at = await push_event_file_at_chronology_rank(
+        app, harvester_id, index_id, actor_login, repo_name, fifth_rank
     )
-    return first_base, first_mtime, fifth_base, fifth_mtime
+    return first_base, first_created_at, fifth_base, fifth_created_at
 
 
 async def discover_earliest_push_event_file_mtime(
@@ -584,94 +635,19 @@ def _push_event_repo_buckets(body: dict[str, Any]) -> list[tuple[str, int]]:
     for bucket in buckets:
         if not isinstance(bucket, dict):
             continue
-        slug = bucket.get("key")
+        repo_name = bucket.get("key")
         count = bucket.get("doc_count")
-        if isinstance(slug, str) and slug and isinstance(count, int):
-            out.append((slug, count))
+        if isinstance(repo_name, str) and repo_name and isinstance(count, int):
+            out.append((repo_name, count))
     return out
-
-
-def _tokens_from_repo_slug(repo_slug: str) -> list[str]:
-    return [part for part in re.split(r"[/_.-]+", repo_slug) if len(part) >= 3]
-
-
-def _repos_matching_substring(repos: list[tuple[str, int]], fragment: str) -> list[tuple[str, int]]:
-    needle = fragment.lower()
-    return [(slug, count) for slug, count in repos if needle in slug.lower()]
-
-
-async def discover_concept_slug_mismatch_pair(
-    app: FastMCP,
-    harvester_id: str,
-    index_id: str,
-    *,
-    min_pushes: int = 10,
-    repo_terms_size: int = 500,
-    concept_aliases: tuple[str, ...] = _CONCEPT_ALIASES,
-) -> tuple[str, str, str, int]:
-    """Return ``(concept_alias, slug_fragment, repo_slug, push_count)`` for an unambiguous partial match.
-
-      The concept word (e.g. ``pet``) must not occur in ``repo_slug``; exactly one indexed repo
-    must match the slug fragment (e.g. ``dog``) among PushEvent rows.
-    """
-
-    body = await mcp_harvester_search(
-        app,
-        harvester_id,
-        index_id,
-        {
-            "size": 0,
-            "query": {"term": {"type": "PushEvent"}},
-            "aggs": {
-                "repos": {
-                    "terms": {
-                        "field": "repo.name",
-                        "size": repo_terms_size,
-                        "min_doc_count": min_pushes,
-                    }
-                }
-            },
-        },
-    )
-    repos = _push_event_repo_buckets(body)
-    if not repos:
-        msg = "No PushEvent repositories in terms aggregation"
-        raise AssertionError(msg)
-
-    candidates: list[tuple[int, str, str, str, int]] = []
-    for concept in concept_aliases:
-        concept_l = concept.lower()
-        if any(concept_l in slug.lower() for slug, _ in repos):
-            continue
-        for repo_slug, count in repos:
-            if concept_l in repo_slug.lower():
-                continue
-            for token in _tokens_from_repo_slug(repo_slug):
-                token_l = token.lower()
-                if token_l == concept_l or len(token_l) < 3:
-                    continue
-                matches = _repos_matching_substring(repos, token)
-                if len(matches) == 1 and matches[0][0] == repo_slug:
-                    candidates.append((count, concept, token, repo_slug, count))
-
-    if not candidates:
-        msg = (
-            "No unambiguous concept/slug-fragment pair "
-            f"(concept not in slug; one repo per fragment; min_pushes={min_pushes})"
-        )
-        raise AssertionError(msg)
-
-    candidates.sort(key=lambda row: row[0], reverse=True)
-    _rank, concept, token, repo_slug, count = candidates[0]
-    return concept, token, repo_slug, count
 
 
 def _aggregate_org_push_counts(repos: list[tuple[str, int]]) -> dict[str, int]:
     org_counts: dict[str, int] = {}
-    for slug, count in repos:
-        if "/" not in slug:
+    for repo_name, count in repos:
+        if "/" not in repo_name:
             continue
-        org = slug.split("/", 1)[0]
+        org = repo_name.split("/", 1)[0]
         if org:
             org_counts[org] = org_counts.get(org, 0) + count
     return org_counts
@@ -785,11 +761,11 @@ async def count_repos_with_push_events_under_org(
     return len(_push_event_repo_buckets(body))
 
 
-async def count_push_events_by_repo_slug(
+async def count_push_events_by_repo_name(
     app: FastMCP,
     harvester_id: str,
     index_id: str,
-    repo_slug: str,
+    repo_name: str,
 ) -> int:
     body = await mcp_harvester_search(
         app,
@@ -802,7 +778,7 @@ async def count_push_events_by_repo_slug(
                 "bool": {
                     "must": [
                         {"term": {"type": "PushEvent"}},
-                        {"term": {"repo.name": repo_slug}},
+                        {"term": {"repo.name": repo_name}},
                     ]
                 }
             },

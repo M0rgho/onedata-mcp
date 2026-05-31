@@ -39,8 +39,8 @@ def _commit_author_email(json_meta: dict[str, Any]) -> str:
     return email
 
 
-@pytest.mark.e2e_scenario("github-json-commit-email-not-indexed")
-async def test_forge_github_json_commit_author_email_not_indexed(
+@pytest.mark.e2e_scenario("find-github-author-email-not-indexed")
+async def test_find_github_author_email_not_indexed(
     request: Any,
     mcp_application: Any,
     forge_api_key: str,
@@ -50,7 +50,7 @@ async def test_forge_github_json_commit_author_email_not_indexed(
 ) -> None:
     harvester_id, index_id, _space_id = github_harvester_bundle
     actor_login = _EX["actor_login"]
-    repo_slug = _EX["repo_slug"]
+    repo_name = _EX["repo_name"]
     commit_message = _EX["commit_message"]
     expected_email = _EX["json_value"]
     expected_creation_epoch = _EX["file_creation_epoch"]
@@ -79,7 +79,7 @@ async def test_forge_github_json_commit_author_email_not_indexed(
         assert actor.get("login") == actor_login
         repo = json_meta.get("repo")
         assert isinstance(repo, dict)
-        assert repo.get("name") == repo_slug
+        assert repo.get("name") == repo_name
 
         term_email = await mcp_harvester_search(
             app,
@@ -94,12 +94,12 @@ async def test_forge_github_json_commit_author_email_not_indexed(
         assert es_hits_total(term_email) == 0
 
     scenario = E2EScenario(
-        name="forge-github-json-commit-email-not-indexed",
+        name="find-github-author-email-not-indexed",
         system_prompt=GITHUB_FORGE_USER_SYSTEM,
         user_prompt=(
-            f"In {GITHUB_DATASET_SPACE}, for {actor_login!r}'s push to {repo_slug!r} where the "
-            f"commit message is {commit_message!r}: what {_EX['prompt_field_label']} is in the "
-            f"event metadata, and what is the archived file's creation time in epoch seconds?"
+            f"In {GITHUB_DATASET_SPACE} space find and report the commit author email for the "
+            f"push to {repo_name!r} by {actor_login!r} where the commit message is {commit_message!r}"
+            "Also report the unformatted file creation timestamp"
         ),
         required_tools=frozenset(
             {"get_file_metadata", "get_file_attributes", "query_harvester_index"}

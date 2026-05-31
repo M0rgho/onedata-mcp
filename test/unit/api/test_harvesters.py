@@ -232,6 +232,73 @@ async def test_query_harvester_index_post_search_serializes_body(
     )
 
 
+_RAW_ES_MAPPING = {
+    "github-index-2026": {
+        "mappings": {
+            "properties": {
+                "id": {"type": "long"},
+                "repo": {"properties": {"name": {"type": "keyword"}}},
+                "payload": {
+                    "properties": {"repository": {"properties": {"full_name": {"type": "keyword"}}}}
+                },
+                "__onedata": {
+                    "properties": {
+                        "fileName": {
+                            "type": "text",
+                            "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
+                        },
+                        "fileId": {"type": "keyword"},
+                    }
+                },
+            }
+        }
+    }
+}
+
+
+def test_flatten_es_mapping_compacts_nested_and_multifield_types() -> None:
+    flat = harvesters.flatten_es_mapping(_RAW_ES_MAPPING)
+    assert flat == {
+        "id": "long",
+        "repo.name": "keyword",
+        "payload.repository.full_name": "keyword",
+        "__onedata.fileName": "text+keyword",
+        "__onedata.fileId": "keyword",
+    }
+
+
+def test_flatten_es_mapping_handles_unwrapped_and_unknown_shapes() -> None:
+    unwrapped = {"mappings": {"properties": {"title": {"type": "text"}}}}
+    assert harvesters.flatten_es_mapping(unwrapped) == {"title": "text"}
+    assert harvesters.flatten_es_mapping({"unexpected": "shape"}) == {}
+
+
+@pytest.mark.asyncio
+async def test_query_harvester_index_mapping_returns_compact_fields(
+    monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
+) -> None:
+    _set_env(monkeypatch)
+    httpx_mock.add_response(
+        method="POST",
+        url="https://onezone.example/api/v3/onezone/harvesters/h1/indices/idx1/query",
+        json=_RAW_ES_MAPPING,
+    )
+
+    result = await harvesters.query_harvester_index(
+        "h1", "idx1", harvesters.harvester_index_query("get", "_mapping")
+    )
+
+    assert result == {
+        "fields": {
+            "id": "long",
+            "repo.name": "keyword",
+            "payload.repository.full_name": "keyword",
+            "__onedata.fileName": "text+keyword",
+            "__onedata.fileId": "keyword",
+        }
+    }
+
+
 def test_build_onezone_harvester_query_serializes_body() -> None:
     assert harvesters.build_onezone_harvester_query(
         "post",

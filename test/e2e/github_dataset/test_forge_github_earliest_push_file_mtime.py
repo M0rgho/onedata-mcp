@@ -49,10 +49,8 @@ async def test_forge_github_earliest_push_file_mtime(
         name="forge-github-earliest-push-file-mtime",
         system_prompt=GITHUB_FORGE_USER_SYSTEM,
         user_prompt=(
-            f"A colleague asked about archived GitHub pushes in {GITHUB_DATASET_SPACE}. "
-            f"For contributor {actor_login!r}, find their earliest PushEvent in the harvester "
-            "catalog and report when that event's .dat file was last modified on the provider "
-            "(mtime). Mention the filename too."
+            f"I want to find the earliest PushEvent for a {actor_login!r} contributor in {GITHUB_DATASET_SPACE}. "
+            "Report the filename and modified timestamp of the found file."
         ),
         required_tools=frozenset({"query_harvester_index"}),
         max_tokens=GITHUB_FORGE_MAX_TOKENS,

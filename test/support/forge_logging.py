@@ -28,7 +28,7 @@ def _run_subdirectory_for_base(base: Path) -> str:
     return sub
 
 
-def trace_output_path(scenario_slug: str) -> Path:
+def trace_output_path(scenario_name: str) -> Path:
     """
     Resolve trace output path.
 
@@ -37,7 +37,7 @@ def trace_output_path(scenario_slug: str) -> Path:
     Otherwise: write one file per scenario run under PLGRID_E2E_TRACE_DIR (default ``logs``,
     relative to cwd). Traces share one subdirectory per pytest process and trace base directory,
     named UTC ``YYYY-MM-DD_HH-MM-SS`` fixed on the **first** trace in that bucket:
-    ``<dir>/<YYYY-MM-DD_HH-MM-SS>/forge_trace_<slug>_<utc>_<pid>.json``.
+    ``<dir>/<YYYY-MM-DD_HH-MM-SS>/forge_trace_<scenario>_<utc>_<pid>.json``.
     """
 
     explicit = os.getenv("PLGRID_E2E_TRACE_FILE", "").strip()
@@ -55,10 +55,10 @@ def trace_output_path(scenario_slug: str) -> Path:
         base_path = Path.cwd() / base_path
     base = base_path.resolve()
     run_dir = _run_subdirectory_for_base(base)
-    safe_slug = re.sub(r"[^\w\-]+", "_", scenario_slug)[:80] or "scenario"
+    safe_name = re.sub(r"[^\w\-]+", "_", scenario_name)[:80] or "scenario"
     ts = datetime.datetime.now(datetime.UTC).strftime("%Y%m%dT%H%M%SZ")
     pid = os.getpid()
-    return base / run_dir / f"forge_trace_{safe_slug}_{ts}_{pid}.json"
+    return base / run_dir / f"forge_trace_{safe_name}_{ts}_{pid}.json"
 
 
 def trace_uses_explicit_file() -> bool:
