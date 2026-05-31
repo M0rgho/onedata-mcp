@@ -27,8 +27,8 @@ from openfoodfacts_harvester import (
 pytestmark = OPENFOODFACTS_FORGE_PYTESTMARK
 
 
-@pytest.mark.e2e_scenario("off-readme-example-image-url")
-async def test_forge_off_readme_example_raw_image_https_url(
+@pytest.mark.e2e_scenario("off-understand-dataset-naming-conventions")
+async def test_forge_off_understand_dataset_naming_conventions(
     request: Any,
     mcp_application: Any,
     forge_api_key: str,
@@ -41,11 +41,11 @@ async def test_forge_off_readme_example_raw_image_https_url(
         assert README_EXAMPLE_RAW_IMAGE_URL in text
 
     scenario = E2EScenario(
-        name="forge-off-readme-example-image-url",
+        name="forge-off-understand-dataset-naming-conventions",
         system_prompt=OPENFOODFACTS_FORGE_USER_SYSTEM,
         user_prompt=(
             f"In {OPENFOODFACTS_SPACE_LABEL}, for barcode {README_EAN13_BARCODE}, "
-            "what HTTPS URL fetches image 1 per the space README?"
+            "what is the HTTPS URL for fetching image 1? Lookup documentation file content."
         ),
         required_tools=frozenset({"grep_file_content"}),
         max_tokens=OPENFOODFACTS_FORGE_MAX_TOKENS,

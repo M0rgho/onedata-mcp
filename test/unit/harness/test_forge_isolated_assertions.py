@@ -38,7 +38,11 @@ def _run(
         forbidden_tools=forbidden,
     )
     metrics = RunMetrics(tools_in_context_count=1, tool_call_count=len(tools), tool_calls=tools)
-    metrics.recompute_tool_sets(scenario.required_tools, forbidden=scenario.forbidden_tools)
+    metrics.recompute_tool_sets(
+        scenario.required_tools,
+        optional=scenario.optional_tools,
+        forbidden=scenario.forbidden_tools,
+    )
     return ForgeRunResult(
         scenario=scenario,
         dispatch_mode="mcp",

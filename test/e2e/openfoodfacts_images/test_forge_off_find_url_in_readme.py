@@ -26,8 +26,8 @@ from openfoodfacts_harvester import (
 pytestmark = OPENFOODFACTS_FORGE_PYTESTMARK
 
 
-@pytest.mark.e2e_scenario("off-readme-data-keys-url")
-async def test_forge_off_readme_data_keys_listing_url(
+@pytest.mark.e2e_scenario("off-find-url-in-readme")
+async def test_forge_off_find_url_in_readme(
     request: Any,
     mcp_application: Any,
     forge_api_key: str,
@@ -41,11 +41,11 @@ async def test_forge_off_readme_data_keys_listing_url(
         assert README_DATA_KEYS_LISTING_URL in grep_out
 
     scenario = E2EScenario(
-        name="forge-off-readme-data-keys-url",
+        name="forge-off-find-url-in-readme",
         system_prompt=OPENFOODFACTS_FORGE_USER_SYSTEM,
         user_prompt=(
-            f"In {OPENFOODFACTS_SPACE_LABEL}, what HTTPS URL downloads the full S3 key listing "
-            "from the space README?"
+            f"In {OPENFOODFACTS_SPACE_LABEL}, what is the URL for downloading the full S3 key listing?"
+            "Figure it out from dataset documentation."
         ),
         required_tools=frozenset({"grep_file_content"}),
         max_tokens=OPENFOODFACTS_FORGE_MAX_TOKENS,

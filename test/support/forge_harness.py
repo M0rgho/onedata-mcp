@@ -214,6 +214,7 @@ async def run_forge_scenario(
     metrics.forge_loop_wall_time_ms = (time.perf_counter() - loop_t0) * 1000.0
     metrics.recompute_tool_sets(
         scenario.required_tools,
+        optional=scenario.optional_tools,
         forbidden=scenario.forbidden_tools,
     )
 
@@ -228,6 +229,7 @@ async def run_forge_scenario(
             "max_tokens_cap": scenario.max_tokens,
             "max_tool_rounds_cap": scenario.max_tool_rounds,
             "required_tools_sorted": sorted(scenario.required_tools),
+            "optional_tools_sorted": sorted(scenario.optional_tools),
             "forbidden_tools_sorted": sorted(scenario.forbidden_tools),
             "tools_in_context_sorted": sorted(context_names),
             "user_prompt": scenario.user_prompt,

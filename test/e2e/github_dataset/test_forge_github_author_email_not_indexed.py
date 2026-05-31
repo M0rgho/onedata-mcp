@@ -15,6 +15,7 @@ from github_dataset_harvester import (
 from github_forge_e2e import (
     GITHUB_FORGE_MAX_TOKENS,
     GITHUB_FORGE_PYTESTMARK,
+    GITHUB_FORGE_STANDARD_MAX_TOOL_ROUNDS,
     GITHUB_FORGE_USER_SYSTEM,
     GITHUB_JSON_FIELD_NOT_INDEXED_EXAMPLE,
     assert_successful_harvester_queries,
@@ -105,7 +106,7 @@ async def test_find_github_author_email_not_indexed(
             {"get_file_metadata", "get_file_attributes", "query_harvester_index"}
         ),
         max_tokens=GITHUB_FORGE_MAX_TOKENS,
-        max_tool_rounds=12,
+        max_tool_rounds=GITHUB_FORGE_STANDARD_MAX_TOOL_ROUNDS,
     )
     run = await run_shared_forge_scenario(
         scenario=scenario,

@@ -70,9 +70,9 @@ def register_module(mcp: FastMCP) -> None:
         that triple to the plugin; this tool returns the parsed Elasticsearch JSON response —
         except for ``_mapping`` (see below).
 
-        Prefer calling ``get_harvester_index_schema`` before calling this tool to verify the index schema.
+        Prefer calling ``get_harvester_index_schema`` before this tool to verify the index schema.
         Use size and offset for sorted queries to minimize the number of hits returned.
-        Do not asume metadata is sorted without explicit sort clause.
+        Do not assume metadata is sorted without explicit sort clause.
 
         **Path allowlist (Onezone ES backend):** only ``_search`` is accepted on ``POST``.
         Paths like ``_count`` return HTTP 400. Use ``query_harvester_index`` with ``method``
@@ -92,6 +92,11 @@ def register_module(mcp: FastMCP) -> None:
         - Trim payloads: add ``"_source": ["__onedata.fileName", "__onedata.fileId"]`` to ``body``.
         - Doc by ES id: ``{"method": "get", "path": "<document_id>"}`` (id from a prior hit).
 
+        **Filenames:** ``GET`` ``_mapping`` ``fields`` — ``text+keyword`` → ``term``/``wildcard`` on
+        ``.keyword`` (e.g. ``{"wildcard": {"__onedata.fileName.keyword": "*.400.jpg"}}``); plain
+        ``keyword`` fields need no suffix. ``_source`` omits ``.keyword``. Prefer exact globs
+        (``*.400.jpg``) over loose ``*400*``.
+
         From ``_search`` hits, resolve files on Oneprovider via ``__onedata.path`` or file id
         through ``get_file_id`` / ``get_file_attributes``.
 
@@ -99,10 +104,9 @@ def register_module(mcp: FastMCP) -> None:
         What to do when a query returns zero hits:
         Do not conclude the data is missing after one failed query. Retry with adjusted field paths.
 
-        1. Inspect the index schema with `get_harvester_index_schema` and verify your chosen fields.
+        1. Inspect schema / ``_mapping`` ``fields``; for ``text+keyword``, retry on ``.keyword``.
 
-        2. Inspect a sample document: `POST` `_search` with `{"size": 1, "query": {"match_all": {}}}`
-            and compare `_source` keys to the fields in your `term` / `bool` filters.
+        2. Sample one hit (`match_all`, ``size``: 1) and compare ``_source`` to your filter paths.
 
         3. Narrow the failure: drop one filter at a time to see which clause
             eliminates hits, then fix that field path only.

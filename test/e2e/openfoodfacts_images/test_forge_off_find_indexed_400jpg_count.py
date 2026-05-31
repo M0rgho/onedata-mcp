@@ -24,7 +24,7 @@ from openfoodfacts_harvester import (
 pytestmark = OPENFOODFACTS_FORGE_PYTESTMARK
 
 
-@pytest.mark.e2e_scenario("off-indexed-400jpg-count")
+@pytest.mark.e2e_scenario("find-off-indexed-400jpg-count")
 async def test_forge_off_indexed_400jpg_count(
     request: Any,
     mcp_application: Any,
@@ -50,13 +50,12 @@ async def test_forge_off_indexed_400jpg_count(
         assert count >= 100_000
 
     scenario = E2EScenario(
-        name="forge-off-indexed-400jpg-count",
+        name="forge-find-off-indexed-400jpg-count",
         system_prompt=OPENFOODFACTS_FORGE_USER_SYSTEM,
         user_prompt=(
-            f"In {OPENFOODFACTS_SPACE_LABEL}, use the dataset documentation at the space "
-            "root to learn how 400-pixel-wide JPEG variants are named, then query the "
-            "harvester generic search index for that workspace. How many such resized "
-            "image files are catalogued in the index? Reply with the count only."
+            f"In {OPENFOODFACTS_SPACE_LABEL} figure out how 400-pixel-wide JPEG variants are named,"
+            "then find out how many such resized image files are present in the harvester's index? "
+            "Reply with the count."
         ),
         required_tools=frozenset({"query_harvester_index"}),
         max_tokens=OPENFOODFACTS_FORGE_MAX_TOKENS,

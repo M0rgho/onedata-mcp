@@ -66,7 +66,8 @@ def _assert_required_tools_successfully_used(result: ForgeRunResult) -> None:
         f"(successful={sorted(successful)}; failed_calls={summarize_failed_tool_calls(result)})"
     )
     if result.scenario.require_no_extra_tool_calls:
-        extras = successful - required
+        permitted = required | result.scenario.optional_tools
+        extras = successful - permitted
         assert not extras, (
             f"Unexpected successful tools {sorted(extras)} (scenario forbids extras); "
             f"failed_calls={summarize_failed_tool_calls(result)}"

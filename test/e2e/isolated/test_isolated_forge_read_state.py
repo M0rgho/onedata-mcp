@@ -538,6 +538,7 @@ async def test_forge_list_harvester_indexes(
         system_prompt=_ISOLATED_SYSTEM_PROMPT,
         user_prompt=("List every search index exposed by user harvesters."),
         required_tools=frozenset({"list_user_harvesters"}),
+        optional_tools=frozenset({"get_harvester_index_schema"}),
         require_no_extra_tool_calls=True,
     )
 

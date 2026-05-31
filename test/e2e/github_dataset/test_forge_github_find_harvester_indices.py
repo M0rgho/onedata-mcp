@@ -15,6 +15,7 @@ from github_dataset_harvester import (
 from github_forge_e2e import (
     GITHUB_FORGE_MAX_TOKENS,
     GITHUB_FORGE_PYTESTMARK,
+    GITHUB_FORGE_STANDARD_MAX_TOOL_ROUNDS,
     GITHUB_FORGE_USER_SYSTEM,
 )
 from legacy_forge import run_shared_forge_scenario
@@ -61,7 +62,7 @@ async def test_find_github_harvester_indices(
         ),
         required_tools=frozenset({"list_user_harvesters"}),
         max_tokens=GITHUB_FORGE_MAX_TOKENS,
-        max_tool_rounds=16,
+        max_tool_rounds=GITHUB_FORGE_STANDARD_MAX_TOOL_ROUNDS,
     )
     run = await run_shared_forge_scenario(
         scenario=scenario,

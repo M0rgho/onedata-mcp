@@ -430,8 +430,9 @@ async def test_forge_json_metadata(
         system_prompt=_ISOLATED_SYSTEM,
         user_prompt=(
             f"On file {path!r}: read the current JSON metadata, "
-            "then update it so title is 'E2E Forge', version is 2, and status is 'published', "
-            "then verify if the JSON metadata was updated successfully."
+            "and update the object with title 'E2E Forge', version 2, and status 'published', "
+            "then verify if the JSON metadata was updated successfully. "
+            "Use get_file_metadata for verification."
         ),
         required_tools=meta_tools,
         require_no_extra_tool_calls=False,

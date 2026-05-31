@@ -14,6 +14,7 @@ class E2EScenario:
     name: str
     user_prompt: str
     required_tools: frozenset[str]
+    optional_tools: frozenset[str] = frozenset()
     model: str | None = None
     system_prompt: str | None = None
     temperature: float = 0.0
@@ -54,6 +55,7 @@ class RunMetrics:
         self,
         required: frozenset[str],
         *,
+        optional: frozenset[str] = frozenset(),
         forbidden: frozenset[str] | None = None,
     ) -> None:
         names = [c.tool_name for c in self.tool_calls]
@@ -61,7 +63,8 @@ class RunMetrics:
         self.unique_tools_called = frozenset(names)
         self.missing_required_tools = required - self.unique_tools_called
         self.required_tools_satisfied = self.missing_required_tools == frozenset()
-        self.unnecessary_tools_called = self.unique_tools_called - required
+        permitted = required | optional
+        self.unnecessary_tools_called = self.unique_tools_called - permitted
         blocked = forbidden or frozenset()
         self.forbidden_tools_called = self.unique_tools_called & blocked
 

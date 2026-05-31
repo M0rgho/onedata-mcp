@@ -101,6 +101,34 @@ def test_assert_required_tools_relaxed_when_answer_fragments_match() -> None:
     )
 
 
+def test_assert_required_tools_allows_optional_tools_when_no_extras() -> None:
+    scenario = E2EScenario(
+        name="t",
+        user_prompt="p",
+        required_tools=frozenset({"list_user_harvesters"}),
+        optional_tools=frozenset({"get_harvester_index_schema"}),
+        require_no_extra_tool_calls=True,
+    )
+    metrics = RunMetrics(
+        tools_in_context_count=2,
+        tool_call_count=2,
+        tool_calls=[
+            ToolCallMetric("list_user_harvesters", 1.0, True),
+            ToolCallMetric("get_harvester_index_schema", 1.0, True),
+        ],
+    )
+    metrics.recompute_tool_sets(scenario.required_tools, optional=scenario.optional_tools)
+    run = ForgeRunResult(
+        scenario=scenario,
+        dispatch_mode="mcp",
+        metrics=metrics,
+        final_assistant_text="index 599b846397264ce083feeb333ab4500ech060a",
+        finish_reason="stop",
+        raw_tool_names_in_order=["list_user_harvesters", "get_harvester_index_schema"],
+    )
+    assert_required_tools_and_optional_policy(run)
+
+
 def test_assert_final_answer_contains_all_accepts_comma_formatted_count() -> None:
     scenario = E2EScenario(
         name="t",

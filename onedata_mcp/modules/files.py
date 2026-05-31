@@ -18,6 +18,10 @@ from onedata_mcp.api.files import (
     set_file_xattrs,
 )
 
+# Body stored on the file — not the facet wrapper returned by get_file_metadata.
+type JsonMetadataDocument = dict[str, Any] | list[Any]
+type FileMetadataPayload = str | JsonMetadataDocument
+
 
 def register_module(mcp: FastMCP, *, register_writers: bool = True) -> None:
     """Register onedata files module tools and prompts with the MCP server."""
@@ -232,7 +236,8 @@ def _register_write_tools(mcp: FastMCP) -> None:
         ),
         xattrs: dict[str, str] | str = Field(
             description=(
-                "Extended attributes: keys map to string values only (omitted keys are left unchanged). "
+                "Extended attributes: keys map to string values only "
+                "(omitted keys are left unchanged). "
                 "Use this rather than `set_file_metadata` for extended attributes. "
                 "You may send a JSON object string instead, e.g. "
                 '\'{"license": "CC-0"}\'. The payload must be a JSON object.'
@@ -241,8 +246,6 @@ def _register_write_tools(mcp: FastMCP) -> None:
     ) -> None:
         """
         Merge file extended attributes without replacing JSON or RDF metadata.
-
-        Prefer this over combining metadata types inside a single setter.
         """
         return await set_file_xattrs(file_id_or_path, xattrs)
 
@@ -252,17 +255,25 @@ def _register_write_tools(mcp: FastMCP) -> None:
             description="File id or path to the file in format /<space_name>/<path_to_file>"
         ),
         metadata_type: Literal["json", "rdf"] = Field(
-            description=('Overwrite one type: "json" or "rdf"'),
-        ),
-        metadata: str | dict[str, Any] | list[Any] = Field(
             description=(
-                "Whole-document replacement for the type chosen above"
-                "`json`: object, array, or UTF-8 JSON matching that shape. "
-                "`rdf`: single RDF/XML string."
+                'Which facet to replace: `"json"` (JSON document) or `"rdf"` (RDF/XML string).'
+            ),
+        ),
+        metadata: FileMetadataPayload = Field(
+            description=(
+                "New value for the chosen facet — whole-document replacement (not a patch). "
+                'For `metadata_type` `"json"`: pass the JSON object or array itself, e.g. '
+                '`{"version": 2, "title": "E2E"}`, or a UTF-8 JSON string of that value. '
+                'Do not wrap it in `{"json": ...}`; that outer key is only in '
+                "`get_file_metadata` responses."
+                'For `metadata_type` `"rdf"`: pass one RDF/XML string.'
             ),
         ),
     ) -> None:
         """
-        Replace JSON or RDF file metadata
+        Replace JSON or RDF file metadata for one facet.
+
+        The `metadata` argument is the stored document body, not the `get_file_metadata`
+        response envelope. Omitted keys are removed — include every field you want kept.
         """
         return await set_file_metadata(file_id_or_path, metadata_type, metadata)

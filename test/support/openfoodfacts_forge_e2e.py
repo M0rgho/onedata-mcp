@@ -9,10 +9,9 @@ from openfoodfacts_harvester import OPENFOODFACTS_SPACE
 OPENFOODFACTS_FORGE_USER_SYSTEM = (
     "You help people work with their Onedata storage: spaces, files, and harvester search "
     "indexes. Answer from live lookups; do not invent URLs, counts, or field names. "
-    "In final replies use plain digits for numbers, never thousands separators. "
-    "When the user points you at dataset documentation in a workspace, read that file from "
-    "Onedata (for example via list_files at the space root, grep, or download) before "
-    "answering. Include every fact the user asked for (URLs, counts, path segments)."
+    "This dataset contains a README at the root of the space. Use it to understand the dataset."
+    "In final replies use plain digits for numbers, for example '12345' instead of '12,345' "
+    "Also do not format dates or times unless explicitly asked for. "
 )
 
 README_LOOKUP_TOOLS = frozenset(
