@@ -104,7 +104,7 @@ async def test_forge_github_mmomtchev_push_commit_hashes(
         assert commit_hashes == EXPECTED_COMMIT_HASHES
 
     scenario = E2EScenario(
-        name="forge-github-mmomtchev-push-commit-hashes",
+        name="forge-github-push-commit-hashes",
         system_prompt=GITHUB_FORGE_USER_SYSTEM,
         user_prompt=(
             f"In {GITHUB_DATASET_SPACE} space find and list every commit "

@@ -1,18 +1,18 @@
-"""Forge: top PushEvent contributor and count."""
+"""Forge: earliest PushEvent file mtime for a contributor."""
 
 from __future__ import annotations
 
 from typing import Any
 
 import pytest
-from assertions_lib import assert_forge_scenario_outcome
+from assertions_lib import assert_required_tools_and_optional_policy
 from e2e_types import E2EScenario
 from github_dataset_harvester import (
     GITHUB_DATASET_SPACE,
-    count_push_events_by_actor_login,
-    discover_top_push_event_actor,
+    discover_earliest_push_event_file_mtime,
 )
 from github_forge_e2e import (
+    FILE_LOOKUP_TOOLS,
     GITHUB_FORGE_HARD_MAX_TOOL_ROUNDS,
     GITHUB_FORGE_MAX_TOKENS,
     GITHUB_FORGE_PYTESTMARK,
@@ -24,32 +24,35 @@ from legacy_forge import run_shared_forge_scenario
 pytestmark = GITHUB_FORGE_PYTESTMARK
 
 
-@pytest.mark.e2e_scenario("github-top-push-event-actor")
-async def test_forge_github_top_push_event_actor(
+@pytest.mark.e2e_scenario("github-find-earliest-push-file-mtime")
+async def test_forge_github_earliest_push_file_mtime(
     request: Any,
     mcp_application: Any,
     forge_api_key: str,
     forge_model: str,
     forge_base_url: str,
     github_harvester_bundle: tuple[str, str, str],
-    github_top_push_actor_oracle: tuple[str, int],
+    github_earliest_push_mtime_oracle: tuple[str, str, str, Any],
 ) -> None:
+    actor_login, _basename, logical_path, expected_mtime = github_earliest_push_mtime_oracle
     harvester_id, index_id, _space_id = github_harvester_bundle
-    expected_login, expected_count = github_top_push_actor_oracle
 
     async def verify(app: Any) -> None:
-        login, count = await discover_top_push_event_actor(app, harvester_id, index_id)
-        assert login == expected_login
-        assert count == expected_count
-        assert count == await count_push_events_by_actor_login(app, harvester_id, index_id, login)
+        basename, path, mtime = await discover_earliest_push_event_file_mtime(
+            app, harvester_id, index_id, actor_login
+        )
+        assert path == logical_path
+        assert basename.endswith(".dat")
+        assert mtime == expected_mtime
 
     scenario = E2EScenario(
-        name="forge-github-top-push-event-actor",
+        name="forge-find-github-earliest-push-file-mtime",
         system_prompt=GITHUB_FORGE_USER_SYSTEM,
         user_prompt=(
-            f"In the {GITHUB_DATASET_SPACE} space find and report the GitHub account with the highest number of PushEvent records."
+            f"I want to find the earliest PushEvent for a {actor_login!r} contributor in {GITHUB_DATASET_SPACE}. "
+            "Report the filename and modified timestamp of the found file."
         ),
-        required_tools=frozenset({"list_user_harvesters", "query_harvester_index"}),
+        required_tools=frozenset({"query_harvester_index"}),
         max_tokens=GITHUB_FORGE_MAX_TOKENS,
         max_tool_rounds=GITHUB_FORGE_HARD_MAX_TOOL_ROUNDS,
     )
@@ -62,9 +65,5 @@ async def test_forge_github_top_push_event_actor(
         pytest_request=request,
         verify_state=verify,
     )
+    assert_required_tools_and_optional_policy(run, any_of=(FILE_LOOKUP_TOOLS,))
     assert_successful_harvester_queries(run)
-    assert_forge_scenario_outcome(
-        run,
-        answer_fragments=(str(expected_count), expected_login),
-        answer_hint="Answer should name the top PushEvent contributor and their count.",
-    )

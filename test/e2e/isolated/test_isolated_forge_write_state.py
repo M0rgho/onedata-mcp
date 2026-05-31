@@ -270,7 +270,8 @@ async def test_forge_modify_file_xattrs(
         system_prompt=_ISOLATED_SYSTEM,
         user_prompt=(
             f"On file {path!r}: set extended attributes license=CC-0 and provenance=e2e. "
-            "Afterwards verify if the xattrs were updated successfully."
+            "Afterwards verify if the xattrs were updated successfully. "
+            "Use get_file_metadata for verification."
         ),
         required_tools=meta_tools,
         require_no_extra_tool_calls=True,
